@@ -5,6 +5,7 @@ mod models;
 mod scan;
 mod entitlements;
 mod output;
+mod monitor;
 
 use anyhow::Result;
 use std::time::Instant;
@@ -12,6 +13,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 fn main() -> Result<()> {
+    // Check if monitor mode is enabled
+    if cli::is_monitor_mode() {
+        let config = cli::parse_monitor_config()?;
+        monitor::polling::start_monitoring(config)
+    } else {
+        run_scan_mode()
+    }
+}
+
+fn run_scan_mode() -> Result<()> {
     let config = cli::parse_args()?;
     
     // Set up interrupt handling

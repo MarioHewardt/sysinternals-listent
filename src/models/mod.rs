@@ -10,6 +10,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::time::{Duration, SystemTime};
 
 /// Represents a single binary file with its entitlements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,3 +70,118 @@ pub struct ScanConfig {
 }
 
 // TODO: Implement data structures per data-model.md specification
+
+//
+// Monitor-specific data structures (T012-T015)
+//
+
+/// Represents a monitored process and its entitlements
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoredProcess {
+    /// Process ID (PID)
+    pub pid: u32,
+    /// Process name (executable name)
+    pub name: String,
+    /// Full path to the executable
+    pub executable_path: PathBuf,
+    /// Entitlements found in the process executable
+    pub entitlements: Vec<String>,
+    /// Timestamp when this process was first discovered
+    pub discovery_timestamp: SystemTime,
+}
+
+/// Configuration for polling behavior in monitor mode
+#[derive(Debug, Clone)]
+pub struct PollingConfiguration {
+    /// Polling interval
+    pub interval: Duration,
+    /// Path filters for process monitoring
+    pub path_filters: Vec<PathBuf>,
+    /// Entitlement filters for process monitoring
+    pub entitlement_filters: Vec<String>,
+    /// Whether to output JSON format
+    pub output_json: bool,
+    /// Whether to run in quiet mode
+    pub quiet_mode: bool,
+}
+
+/// Snapshot of process state at a given moment
+#[derive(Debug, Clone)]
+pub struct ProcessSnapshot {
+    /// HashMap of PID -> MonitoredProcess for O(1) lookups
+    pub processes: HashMap<u32, MonitoredProcess>,
+    /// Timestamp of this snapshot
+    pub timestamp: SystemTime,
+    /// Duration taken to create this snapshot
+    pub scan_duration: Duration,
+}
+
+/// Represents an entitlement match for filtering
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EntitlementMatch {
+    /// The entitlement key that matched
+    pub key: String,
+    /// The full entitlement key (may include wildcards)
+    pub pattern: String,
+    /// Whether this was an exact match or pattern match
+    pub exact_match: bool,
+}
+
+/// Log entry for Unified Logging output
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogEntry {
+    /// Log level
+    pub level: String,
+    /// Log message
+    pub message: String,
+    /// Timestamp of the log entry
+    pub timestamp: SystemTime,
+    /// Process context (optional)
+    pub process_context: Option<MonitoredProcess>,
+}
+
+/// Custom error types for monitoring operations
+#[derive(Debug, thiserror::Error)]
+pub enum MonitorError {
+    #[error("Invalid polling interval: {0}. Must be between 0.1 and 300.0 seconds")]
+    InvalidInterval(f64),
+    #[error("Process access denied: {0}")]
+    PermissionDenied(String),
+    #[error("System resource error: {0}")]
+    SystemError(String),
+    #[error("Process not found: {0}")]
+    ProcessNotFound(u32),
+}
+
+impl ProcessSnapshot {
+    /// Returns processes that are in this snapshot but not in the previous one
+    pub fn new_processes(&self, previous: &ProcessSnapshot) -> Vec<MonitoredProcess> {
+        self.processes
+            .values()
+            .filter(|process| !previous.processes.contains_key(&process.pid))
+            .cloned()
+            .collect()
+    }
+}
+
+impl PollingConfiguration {
+    /// Validates the polling configuration
+    pub fn validate(&self) -> Result<(), MonitorError> {
+        let interval_secs = self.interval.as_secs_f64();
+        if interval_secs < 0.1 || interval_secs > 300.0 {
+            return Err(MonitorError::InvalidInterval(interval_secs));
+        }
+        Ok(())
+    }
+    
+    /// Creates a default polling configuration
+    pub fn default_monitor() -> Self {
+        Self {
+            interval: Duration::from_secs(1),
+            path_filters: vec![],
+            entitlement_filters: vec![],
+            output_json: false,
+            quiet_mode: false,
+        }
+    }
+}
