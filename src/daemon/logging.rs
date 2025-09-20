@@ -158,11 +158,13 @@ impl DaemonLogger {
         let full_message = format!("{} | {}", message, data.to_string());
         
         // Send to macOS Unified Logging System with proper subsystem and category
+        // Use logger with subsystem and category flags for Console.app compatibility
         let _output = Command::new("logger")
             .args([
                 "-s", // Also send to stderr for debugging
-                "-p", level.as_str(), // Set log level (info, debug, error, etc.)
-                "-t", &format!("{}.{}", self.subsystem, self.category), // Proper subsystem.category format
+                "-p", level.as_str(), // Set log level
+                "-subsystem", &self.subsystem, // Proper subsystem for Console.app
+                "-category", &self.category,   // Proper category for Console.app
                 &full_message
             ])
             .output()
