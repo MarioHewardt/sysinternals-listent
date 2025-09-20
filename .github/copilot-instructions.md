@@ -2,11 +2,11 @@
 
 **Project**: listent - macOS entitlement scanning CLI tool  
 **Language**: Rust  
-**Last Updated**: September 19, 2025
+**Last Updated**: September 20, 2025
 
 ## Project Overview
 
-listent is a fast command-line tool for macOS that scans and monitors code signing entitlements. It provides both one-time scanning and real-time monitoring capabilities for security analysis and compliance verification.
+listent is a fast command-line tool for macOS that scans and monitors code signing entitlements. It provides both one-time scanning and real-time monitoring capabilities for security analysis and compliance verification. Now includes background daemon mode for continuous system monitoring.
 
 ## Current Architecture
 
@@ -19,14 +19,21 @@ src/
 ├── scan/mod.rs          # Filesystem scanning and binary discovery  
 ├── entitlements/mod.rs  # Code signing entitlement extraction
 ├── output/mod.rs        # Output formatting (human-readable and JSON)
-└── monitor/mod.rs       # NEW: Real-time process monitoring
+├── monitor/mod.rs       # Real-time process monitoring
+└── daemon/mod.rs        # NEW: LaunchD daemon functionality
+    ├── config.rs        # Configuration management
+    ├── ipc.rs           # Inter-process communication
+    ├── launchd.rs       # macOS launchd integration
+    └── logging.rs       # Enhanced ULS logging
 ```
 
 ### Key Dependencies
-- **clap**: Command-line argument parsing
+- **clap**: Command-line argument parsing with subcommands
 - **serde_json**: JSON serialization for output
 - **sysinfo**: Process enumeration for monitoring mode
-- **oslog**: macOS Unified Logging integration
+- **tokio**: Async runtime for daemon mode IPC and signal handling
+- **toml**: Configuration file parsing for daemon settings
+- **nix**: Unix domain sockets and signal handling
 
 ### Constitutional Principles
 - Single binary CLI tool targeting macOS
@@ -133,6 +140,130 @@ pub enum MonitorError {
     SystemError(String),
 }
 ```
+
+### Testing Approach
+```rust
+// Unit tests for core logic
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_process_snapshot_comparison() {
+        // Test new process detection logic
+    }
+    
+    #[test]
+    fn test_polling_configuration_validation() {
+        // Test interval bounds checking
+    }
+}
+
+// Integration tests in tests/ directory
+// Test full monitor workflows with real processes
+```
+
+## Feature: LaunchD Daemon Support
+
+### CLI Extensions for Daemon Management
+```rust
+// Extended CLI with subcommands
+#[derive(Parser)]
+pub struct Args {
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+    // ... existing fields
+    #[arg(long)]
+    pub daemon: bool,
+}
+
+#[derive(Subcommand)]
+pub enum Commands {
+    InstallDaemon { config: Option<PathBuf> },
+    UninstallDaemon,
+    DaemonStatus,
+    UpdateConfig { updates: Vec<String> },
+    Logs { follow: bool, since: Option<String> },
+}
+```
+
+### Daemon Configuration Types
+```rust
+// In src/daemon/config.rs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonConfiguration {
+    pub daemon: DaemonSettings,
+    pub logging: LoggingSettings,
+    pub monitoring: MonitoringSettings,
+    pub ipc: IpcSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DaemonSettings {
+    pub polling_interval: f64,      // 0.1-300.0 seconds
+    pub auto_start: bool,           // launchd RunAtLoad setting
+    pub pid_file: PathBuf,          // /var/run/listent/daemon.pid
+}
+
+// Configuration file: /etc/listent/daemon.toml
+```
+
+### LaunchD Integration
+```rust
+// src/daemon/launchd.rs
+pub struct LaunchDPlist {
+    pub label: String,              // com.github.mariohewardt.listent
+    pub program_arguments: Vec<String>,
+    pub run_at_load: bool,
+    pub keep_alive: bool,
+    pub working_directory: Option<PathBuf>,
+}
+
+pub fn generate_plist(daemon_path: &Path) -> Result<String>;
+pub fn install_plist(plist_content: &str, service_name: &str) -> Result<()>;
+pub fn launchctl_load(plist_path: &Path) -> Result<()>;
+pub fn launchctl_unload(service_name: &str) -> Result<()>;
+```
+
+### IPC Communication
+```rust
+// src/daemon/ipc.rs
+#[derive(Debug, Serialize, Deserialize)]
+pub enum IpcMessage {
+    UpdateConfig { updates: ConfigUpdates },
+    ReloadConfig,
+    GetStatus,
+    GetStats,
+    Shutdown,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum IpcResponse {
+    Success { data: Option<serde_json::Value> },
+    Error { code: u32, message: String },
+    ConfigUpdated { new_config: DaemonConfiguration },
+}
+
+// Unix domain socket at /var/run/listent/daemon.sock
+pub struct IpcServer {
+    socket_path: PathBuf,
+    listener: UnixListener,
+}
+```
+
+### Integration Points
+
+#### Daemon Mode Execution
+- Extend main.rs with daemon execution path
+- No terminal output in daemon mode - ULS logging only
+- Reuse existing monitor::polling logic with async wrapper
+- Signal handling for graceful shutdown and config reload
+
+#### Configuration Management
+- TOML-based configuration files
+- Atomic configuration updates with validation
+- Backup and rollback functionality
+- Dynamic reload without daemon restart
 
 ### Testing Approach
 ```rust

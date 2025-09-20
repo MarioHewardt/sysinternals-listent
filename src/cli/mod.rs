@@ -8,7 +8,7 @@
 //! - Monitor mode with real-time process detection
 //! - Help and version commands
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use anyhow::{Result, anyhow};
 use crate::models::{ScanConfig, ScanFilters, PollingConfiguration, MonitorError};
@@ -28,6 +28,10 @@ const DEFAULT_SCAN_PATHS: &[&str] = &[
 #[command(author, version, about)]
 #[command(long_about = "A fast command-line tool to discover and list code signing entitlements for macOS executable binaries.")]
 pub struct Args {
+    /// Daemon management subcommands
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+
     /// Directory or file path to scan
     #[arg(short, long, value_name = "PATH")]
     pub path: Vec<PathBuf>,
@@ -51,6 +55,46 @@ pub struct Args {
     /// Polling interval in seconds (0.1 - 300.0) [default: 1.0]
     #[arg(long, default_value = "1.0", value_name = "SECONDS")]
     pub interval: f64,
+
+    /// Run as background daemon (for monitoring mode)
+    #[arg(long)]
+    pub daemon: bool,
+
+    /// Path to daemon configuration file
+    #[arg(long, value_name = "FILE")]
+    pub config: Option<PathBuf>,
+}
+
+/// Daemon management subcommands
+#[derive(Subcommand, Debug, Clone)]
+pub enum Commands {
+    /// Install daemon service with LaunchD
+    InstallDaemon {
+        /// Path to configuration file
+        #[arg(long, value_name = "FILE")]
+        config: Option<PathBuf>,
+    },
+    /// Uninstall daemon service from LaunchD
+    UninstallDaemon,
+    /// Check daemon service status
+    DaemonStatus,
+    /// Update daemon configuration at runtime
+    UpdateConfig {
+        /// Configuration updates in key=value format
+        updates: Vec<String>,
+    },
+    /// View daemon logs
+    Logs {
+        /// Follow log output continuously
+        #[arg(short, long)]
+        follow: bool,
+        /// Show logs since specific time (e.g., "1h", "30m", "2023-01-01 10:00")
+        #[arg(long, value_name = "TIME")]
+        since: Option<String>,
+        /// Output format (json, human)
+        #[arg(long, default_value = "human")]
+        format: String,
+    },
 }
 
 /// Parse command line arguments and return scan configuration
@@ -131,4 +175,89 @@ pub fn parse_monitor_config() -> Result<PollingConfiguration> {
 pub fn is_monitor_mode() -> bool {
     let args = Args::parse();
     args.monitor
+}
+
+/// Parse raw command line arguments without processing
+pub fn parse_args_raw() -> Result<Args> {
+    Ok(Args::parse())
+}
+
+/// Validate CLI arguments for compatibility
+fn validate_args_compatibility(args: &Args) -> Result<()> {
+    // Daemon mode requires monitor mode
+    if args.daemon && !args.monitor {
+        return Err(anyhow!("--daemon requires --monitor flag"));
+    }
+
+    // Interval validation 
+    if args.interval != 1.0 && !args.monitor {
+        return Err(anyhow!("--interval requires --monitor flag"));
+    }
+
+    if args.interval < 0.1 || args.interval > 300.0 {
+        return Err(MonitorError::InvalidInterval(args.interval).into());
+    }
+
+    Ok(())
+}
+
+/// Get execution mode based on CLI arguments
+pub fn get_execution_mode() -> Result<ExecutionMode> {
+    let args = Args::parse();
+    
+    // Validate argument compatibility
+    validate_args_compatibility(&args)?;
+    
+    match args.command {
+        Some(command) => Ok(ExecutionMode::Subcommand(command.clone())),
+        None => {
+            if args.daemon && args.monitor {
+                Ok(ExecutionMode::Daemon)
+            } else if args.monitor {
+                Ok(ExecutionMode::Monitor)
+            } else {
+                Ok(ExecutionMode::Scan)
+            }
+        }
+    }
+}
+
+/// Execution modes for the application
+#[derive(Debug)]
+pub enum ExecutionMode {
+    Scan,
+    Monitor,
+    Daemon,
+    Subcommand(Commands),
+}
+
+/// Parse configuration updates from command line arguments
+pub fn parse_config_updates(updates: &[String]) -> Result<Vec<(String, String)>> {
+    let mut parsed_updates = Vec::new();
+    
+    for update in updates {
+        if let Some((key, value)) = update.split_once('=') {
+            parsed_updates.push((key.to_string(), value.to_string()));
+        } else {
+            return Err(anyhow!("Invalid update format: '{}'. Expected format: key=value", update));
+        }
+    }
+    
+    Ok(parsed_updates)
+}
+
+/// Validate time format for log filtering
+pub fn validate_time_format(time_str: &str) -> Result<()> {
+    // Simple validation for common time formats
+    if time_str.ends_with('h') || time_str.ends_with('m') || time_str.ends_with('s') {
+        let number_part = &time_str[..time_str.len()-1];
+        number_part.parse::<u32>()
+            .map_err(|_| anyhow!("Invalid time format: {}", time_str))?;
+        Ok(())
+    } else if time_str.contains('-') && time_str.contains(':') {
+        // Basic datetime format validation (could be more robust)
+        Ok(())
+    } else {
+        Err(anyhow!("Invalid time format: {}. Use formats like '1h', '30m', or '2023-01-01 10:00'", time_str))
+    }
 }
