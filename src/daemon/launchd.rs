@@ -3,8 +3,11 @@
 //! Handles plist generation, service installation, and lifecycle management
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use crate::constants::{LAUNCHD_SERVICE_NAME, LAUNCHD_PLIST_NAME};
 
 /// LaunchD plist configuration
 #[derive(Debug, Clone)]
@@ -28,10 +31,10 @@ pub struct LaunchDPlist {
 }
 
 impl LaunchDPlist {
-    /// Create new LaunchD plist configuration
+    /// Create a new LaunchD plist with default settings
     pub fn new(daemon_path: &Path) -> Self {
         Self {
-            label: "com.github.mariohewardt.listent".to_string(),
+            label: LAUNCHD_SERVICE_NAME.to_string(),
             program_arguments: vec![
                 daemon_path.to_string_lossy().to_string(),
                 "--daemon".to_string(),
@@ -119,7 +122,7 @@ impl LaunchDPlist {
     fn install_plist(&self, plist_content: &str) -> Result<PathBuf> {
         // Use LaunchDaemons directory for system-wide service (requires sudo)
         let plist_path = Path::new("/Library/LaunchDaemons")
-            .join(format!("{}.plist", self.label));
+            .join(LAUNCHD_PLIST_NAME);
 
         // Write plist file
         std::fs::write(&plist_path, plist_content)
@@ -146,7 +149,7 @@ impl LaunchDPlist {
     /// Unload service with launchctl
     pub fn launchctl_unload(&self) -> Result<()> {
         let output = Command::new("launchctl")
-            .args(&["unload", &format!("/Library/LaunchDaemons/{}.plist", self.label)])
+            .args(&["unload", &format!("/Library/LaunchDaemons/{}", LAUNCHD_PLIST_NAME)])
             .output()
             .context("Failed to execute launchctl unload")?;
 
@@ -222,7 +225,7 @@ impl LaunchDPlist {
         
         // Remove plist file from LaunchDaemons
         let plist_path = Path::new("/Library/LaunchDaemons")
-            .join(format!("{}.plist", self.label));
+            .join(LAUNCHD_PLIST_NAME);
 
         if plist_path.exists() {
             std::fs::remove_file(&plist_path)

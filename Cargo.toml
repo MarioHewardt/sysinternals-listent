@@ -34,11 +34,13 @@ ctrlc = "3.4"
 # Daemon mode dependencies
 tokio = { version = "1.0", features = ["rt", "net", "fs", "signal", "time", "macros", "io-util", "sync", "rt-multi-thread"] }
 toml = "0.8"
-nix = "0.27"
+nix = { version = "0.27", features = ["process"] }
 uuid = { version = "1.0", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5.0"
 regex = "1.0"
+oslog = "0.2"
+log = "0.4"
 
 [dev-dependencies]
 assert_cmd = "2.0"

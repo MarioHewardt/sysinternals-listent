@@ -1,16 +1,24 @@
-//! Enhanced Unified Logging System (ULS) integration for daemon mode
+//! Enhanced ULS logging for daemon process detection
 //!
-//! Provides structured logging specifically for daemon operations
+//! Provides structured logging to macOS Unified Logging System
 
 use anyhow::{Context, Result};
-use std::process::Command;
 use serde_json::json;
+use oslog::OsLogger;
+use log::{error, warn, info, debug};
+use std::process::Command;
 
-/// Enhanced ULS logger for daemon mode
+/// Enhanced daemon logger for macOS ULS integration
+#[derive(Debug, Clone)]
 pub struct DaemonLogger {
-    pub subsystem: String,
-    pub category: String,
+    /// macOS ULS subsystem identifier
+    subsystem: String,
+    /// ULS category for organizing logs
+    category: String,
+    /// Current logging level
     level: LogLevel,
+    /// Unit value - we use log crate macros instead
+    logger: (),
 }
 
 /// Log levels for daemon operations
@@ -53,10 +61,17 @@ impl DaemonLogger {
             anyhow::bail!("Subsystem must be in reverse DNS format (e.g., 'com.example.app')");
         }
 
+        // Initialize the oslog backend for the log crate
+        let logger = OsLogger::new(&subsystem);
+        log::set_boxed_logger(Box::new(logger))
+            .map_err(|e| anyhow::anyhow!("Failed to set logger: {}", e))?;
+        log::set_max_level(log::LevelFilter::Debug);
+
         Ok(Self {
             subsystem,
             category,
             level,
+            logger: (), // We'll use log macros instead
         })
     }
 
@@ -157,18 +172,21 @@ impl DaemonLogger {
         // Format the complete log message with structured data
         let full_message = format!("{} | {}", message, data.to_string());
         
-        // Send to macOS Unified Logging System with proper subsystem and category
-        // Use logger with subsystem and category flags for Console.app compatibility
-        let _output = Command::new("logger")
-            .args([
-                "-s", // Also send to stderr for debugging
-                "-p", level.as_str(), // Set log level
-                "-subsystem", &self.subsystem, // Proper subsystem for Console.app
-                "-category", &self.category,   // Proper category for Console.app
-                &full_message
-            ])
-            .output()
-            .context("Failed to execute logger command")?;
+        // Use log crate macros which will go to ULS
+        match level {
+            LogLevel::Error => {
+                error!("{}", full_message);
+            },
+            LogLevel::Warn => {
+                warn!("{}", full_message);
+            },
+            LogLevel::Info => {
+                info!("{}", full_message);
+            },
+            LogLevel::Debug => {
+                debug!("{}", full_message);
+            },
+        }
         
         Ok(())
     }

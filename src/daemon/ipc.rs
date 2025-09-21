@@ -147,8 +147,7 @@ impl IpcServer {
             .with_context(|| format!("Failed to bind to socket: {}", self.socket_path.display()))?;
 
         self.listener = Some(listener);
-        eprintln!("🌐 IPC server listening on {}", self.socket_path.display());
-
+        
         // Accept connections in a loop
         while let Some(ref listener) = self.listener {
             match listener.accept().await {

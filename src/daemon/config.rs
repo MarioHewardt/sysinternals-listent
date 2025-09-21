@@ -4,6 +4,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -11,9 +12,7 @@ use std::time::Duration;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonConfiguration {
     pub daemon: DaemonSettings,
-    pub logging: LoggingSettings,
     pub monitoring: MonitoringSettings,
-    pub ipc: IpcSettings,
 }
 
 /// Core daemon runtime settings
@@ -27,17 +26,6 @@ pub struct DaemonSettings {
     pub pid_file: PathBuf,
 }
 
-/// Enhanced ULS logging configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LoggingSettings {
-    /// Log level: error, warn, info, debug
-    pub level: String,
-    /// macOS ULS subsystem identifier
-    pub subsystem: String,
-    /// macOS ULS category for daemon events
-    pub category: String,
-}
-
 /// Process monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonitoringSettings {
@@ -45,13 +33,6 @@ pub struct MonitoringSettings {
     pub path_filters: Vec<PathBuf>,
     /// Entitlements to filter for (empty = all)
     pub entitlement_filters: Vec<String>,
-}
-
-/// IPC communication settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IpcSettings {
-    /// Unix domain socket path for client communication
-    pub socket_path: PathBuf,
 }
 
 impl DaemonConfiguration {
@@ -95,24 +76,6 @@ impl DaemonConfiguration {
             );
         }
 
-        // Validate log level
-        let valid_levels = ["error", "warn", "info", "debug"];
-        if !valid_levels.contains(&self.logging.level.as_str()) {
-            anyhow::bail!(
-                "Invalid log level: '{}'. Must be one of: {:?}",
-                self.logging.level,
-                valid_levels
-            );
-        }
-
-        // Validate subsystem format (reverse DNS)
-        if !self.logging.subsystem.contains('.') {
-            anyhow::bail!(
-                "Invalid subsystem: '{}'. Must be reverse DNS format (e.g., 'com.example.app')",
-                self.logging.subsystem
-            );
-        }
-
         // Validate paths exist and are readable
         for path in &self.monitoring.path_filters {
             if !path.exists() {
@@ -131,11 +94,6 @@ impl DaemonConfiguration {
                 auto_start: true,
                 pid_file: PathBuf::from("/var/run/listent/daemon.pid"),
             },
-            logging: LoggingSettings {
-                level: "info".to_string(),
-                subsystem: "com.github.mariohewardt.listent".to_string(),
-                category: "daemon".to_string(),
-            },
             monitoring: MonitoringSettings {
                 path_filters: vec![
                     PathBuf::from("/Applications"),
@@ -143,9 +101,6 @@ impl DaemonConfiguration {
                     PathBuf::from("/bin"),
                 ],
                 entitlement_filters: vec![], // Monitor all entitlements by default
-            },
-            ipc: IpcSettings {
-                socket_path: PathBuf::from("/var/run/listent/daemon.sock"),
             },
         }
     }
@@ -172,25 +127,6 @@ impl DaemonConfiguration {
             },
             "daemon.pid_file" => {
                 self.daemon.pid_file = PathBuf::from(value);
-            },
-            "logging.level" => {
-                let valid_levels = ["error", "warn", "info", "debug"];
-                if !valid_levels.contains(&value) {
-                    anyhow::bail!("Invalid log level: '{}'. Must be one of: {:?}", value, valid_levels);
-                }
-                self.logging.level = value.to_string();
-            },
-            "logging.subsystem" => {
-                if !value.contains('.') {
-                    anyhow::bail!("Subsystem must be in reverse DNS format");
-                }
-                self.logging.subsystem = value.to_string();
-            },
-            "logging.category" => {
-                self.logging.category = value.to_string();
-            },
-            "ipc.socket_path" => {
-                self.ipc.socket_path = PathBuf::from(value);
             },
             _ => {
                 anyhow::bail!("Unknown configuration key: {}", key);
@@ -231,8 +167,9 @@ impl DaemonConfiguration {
                 .with_context(|| format!("Failed to create PID directory: {}", pid_dir.display()))?;
         }
 
-        // Create socket directory
-        if let Some(socket_dir) = self.ipc.socket_path.parent() {
+        // Create socket directory (using hardcoded path)
+        let socket_path = std::path::PathBuf::from(crate::constants::IPC_SOCKET_PATH);
+        if let Some(socket_dir) = socket_path.parent() {
             std::fs::create_dir_all(socket_dir)
                 .with_context(|| format!("Failed to create socket directory: {}", socket_dir.display()))?;
         }

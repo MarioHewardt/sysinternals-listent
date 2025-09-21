@@ -7,11 +7,13 @@ mod entitlements;
 mod output;
 mod monitor;
 mod daemon;
+mod constants;
 
 use anyhow::{Result, Context};
 use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use crate::constants::APP_SUBSYSTEM;
 
 fn main() -> Result<()> {
     // Determine execution mode from CLI arguments
@@ -295,7 +297,7 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
 
     // Retrieve logs from ULS
     let logs = get_daemon_logs(
-        "com.github.mariohewardt.listent",
+        APP_SUBSYSTEM,
         since.as_deref().unwrap_or("1m"),
     )?;
 

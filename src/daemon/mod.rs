@@ -18,6 +18,7 @@ use tokio::sync::Mutex;
 use tokio::signal;
 use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
 use crate::daemon::config::DaemonConfiguration;
+use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY, IPC_SOCKET_PATH};
 use crate::daemon::ipc::IpcServer;
 use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
@@ -38,8 +39,8 @@ impl DaemonState {
     /// Create new daemon state with configuration
     pub fn new(config: DaemonConfiguration) -> Result<Self> {
         let logger = DaemonLogger::new(
-            "com.github.mariohewardt.listent".to_string(),
-            "daemon".to_string(),
+            APP_SUBSYSTEM.to_string(),
+            DAEMON_CATEGORY.to_string(),
             LogLevel::Info,
         )?;
 
@@ -85,6 +86,39 @@ pub async fn run_daemon_mode() -> Result<()> {
 
 /// Run daemon with specific configuration path
 pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> {
+    // Check if we're already running as the daemon child process
+    if std::env::var("LISTENT_DAEMON_CHILD").is_ok() {
+        // We're the child process - run the daemon directly
+        run_daemon_process(config_path).await
+    } else {
+        // We're the parent - spawn child and exit
+        spawn_daemon_child(config_path)
+    }
+}
+
+/// Spawn daemon child process and exit parent
+fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
+    let current_exe = std::env::current_exe()
+        .context("Failed to get current executable path")?;
+    
+    let mut cmd = std::process::Command::new(current_exe);
+    cmd.env("LISTENT_DAEMON_CHILD", "1");
+    cmd.arg("--daemon").arg("--monitor");
+    
+    if let Some(config) = config_path {
+        cmd.arg("--config").arg(config);
+    }
+    
+    // Spawn the child process detached
+    cmd.spawn()
+        .context("Failed to spawn daemon child process")?;
+    
+    println!("✅ listent daemon started successfully");
+    Ok(())
+}
+
+/// Run the actual daemon process (called by child after fork)
+async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     // Load configuration
     let config = if let Some(ref path) = config_path {
         DaemonConfiguration::load_from_file(path)?
@@ -93,7 +127,7 @@ pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> 
     };
 
     // Create daemon state
-    let socket_path = PathBuf::from(&config.ipc.socket_path);
+    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
     let mut daemon_state = DaemonState::new(config.clone())?
         .with_ipc_server(socket_path.clone())?;
 
@@ -122,13 +156,9 @@ pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> 
     let monitoring_task = {
         let process_tracker = daemon_state.process_tracker.clone();
         let config = daemon_state.config.clone();
-        // Clone logger fields instead of the whole struct
-        let logger_subsystem = daemon_state.logger.subsystem.clone();
-        let logger_category = daemon_state.logger.category.clone();
-        let logger_level = daemon_state.logger.level();
+        let logger = daemon_state.logger.clone(); // Reuse the existing logger
         
         tokio::spawn(async move {
-            let logger = DaemonLogger::new(logger_subsystem, logger_category, logger_level).unwrap();
             if let Err(e) = run_monitoring_loop(process_tracker, config, logger).await {
                 eprintln!("❌ Monitoring loop error: {}", e);
             }
@@ -174,8 +204,6 @@ async fn run_monitoring_loop(
     loop {
         interval.tick().await;
 
-        eprintln!("🔍 Monitoring loop tick at {:?}", std::time::SystemTime::now());
-
         // Get current processes using polling logic
         let current_config = config.lock().await;
         let polling_config = PollingConfiguration {
@@ -205,16 +233,18 @@ async fn run_monitoring_loop(
         // Detect new processes
         let mut tracker = process_tracker.lock().await;
         let new_processes = tracker.detect_new_processes(current_snapshot);
-
-        // Log any new processes with entitlements
+        
+        // Log any new processes with entitlements (silent operation)
         for process in new_processes {
             if !process.entitlements.is_empty() {
-                logger.log_process_detection(
+                if let Err(e) = logger.log_process_detection(
                     process.pid,
                     &process.name,
                     &process.executable_path.to_string_lossy(),
                     &process.entitlements,
-                )?;
+                ) {
+                    eprintln!("❌ Failed to log process {}: {}", process.name, e);
+                }
             }
         }
     }
@@ -253,9 +283,8 @@ pub fn initialize_daemon(config_path: Option<PathBuf>) -> Result<()> {
 
 /// Stop daemon gracefully
 pub fn stop_daemon() -> Result<()> {
-    // Load config to get socket path
-    let config = DaemonConfiguration::default();
-    let socket_path = PathBuf::from(&config.ipc.socket_path);
+    // Use hardcoded socket path
+    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
     
     // Remove socket file if it exists
     if socket_path.exists() {
@@ -278,6 +307,7 @@ async fn scan_current_processes(config: &PollingConfiguration) -> Result<std::co
     
     let mut processes = std::collections::HashMap::new();
     
+    // Scan all processes
     for (pid, process) in system.processes() {
         let pid_u32 = pid.as_u32();
         let process_name = process.name().to_string();
