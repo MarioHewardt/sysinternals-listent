@@ -9,7 +9,7 @@ fn test_json_output_flag() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -23,7 +23,7 @@ fn test_json_output_is_valid_json() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();
@@ -39,11 +39,11 @@ fn test_json_output_deterministic_ordering() {
     
     // Run the same command twice
     let mut cmd1 = Command::cargo_bin("listent").unwrap();
-    cmd1.arg("--json").arg("--path").arg(temp.path().to_str().unwrap());
+    cmd1.arg("--json").arg(temp.path().to_str().unwrap());
     let output1 = cmd1.assert().success().get_output().stdout.clone();
     
     let mut cmd2 = Command::cargo_bin("listent").unwrap();
-    cmd2.arg("--json").arg("--path").arg(temp.path().to_str().unwrap());
+    cmd2.arg("--json").arg(temp.path().to_str().unwrap());
     let output2 = cmd2.assert().success().get_output().stdout.clone();
     
     // Parse JSON and compare non-timing fields
@@ -63,7 +63,7 @@ fn test_json_output_with_filters() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap())
+       .arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
     
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -81,12 +81,12 @@ fn test_json_vs_human_output_different() {
     
     // Human output
     let mut cmd1 = Command::cargo_bin("listent").unwrap();
-    cmd1.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd1.arg(temp.path().to_str().unwrap());
     let human_output = cmd1.assert().success().get_output().stdout.clone();
     
     // JSON output  
     let mut cmd2 = Command::cargo_bin("listent").unwrap();
-    cmd2.arg("--json").arg("--path").arg(temp.path().to_str().unwrap());
+    cmd2.arg("--json").arg(temp.path().to_str().unwrap());
     let json_output = cmd2.assert().success().get_output().stdout.clone();
     
     // Should be different formats

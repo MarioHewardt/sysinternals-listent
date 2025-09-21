@@ -90,7 +90,7 @@ impl DaemonLogger {
     /// Log daemon shutdown event
     pub fn log_shutdown(&self, reason: &str) -> Result<()> {
         let message = json!({
-            "event": "daemon_shutdown", 
+            "event": "daemon_shut   down", 
             "reason": reason,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
@@ -220,7 +220,7 @@ pub fn get_daemon_logs(subsystem: &str, since: &str) -> Result<Vec<String>> {
         .args([
             "show",
             "--predicate",
-            &format!("process == \"logger\" AND messageText CONTAINS \"{}\"", subsystem),
+            &format!("subsystem == \"{}\"", subsystem),
             "--last",
             since,
             "--style",

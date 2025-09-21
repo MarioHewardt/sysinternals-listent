@@ -1,6 +1,7 @@
 use crate::models::{MonitoredProcess, PollingConfiguration, ProcessSnapshot};
 use crate::monitor::{ProcessTracker, init_logger};
 use anyhow::Result;
+use signal_hook;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -12,10 +13,8 @@ pub fn start_monitoring(config: PollingConfiguration) -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
 
-    // Set up Ctrl+C handler
-    ctrlc::set_handler(move || {
-        r.store(false, Ordering::SeqCst);
-    })?;
+    // Set up signal handler using signal-hook
+    signal_hook::flag::register(signal_hook::consts::SIGINT, r.clone())?;
 
     // Initialize unified logging
     let _logger = init_logger().ok(); // Graceful degradation if logging fails
@@ -154,13 +153,9 @@ fn output_process_detection(process: &MonitoredProcess, config: &PollingConfigur
         output_human_format(process)?;
     }
 
-    // Log to unified logging system
-    if let Err(e) = crate::monitor::unified_logging::log_process_detection(process) {
-        if !config.quiet_mode {
-            eprintln!("Warning: Failed to log to Unified Logging: {}", e);
-        }
-    }
-
+    // Note: Unified logging is disabled for interactive monitoring to avoid duplicate output.
+    // When daemon mode is implemented, unified logging will be used there instead.
+    
     Ok(())
 }
 

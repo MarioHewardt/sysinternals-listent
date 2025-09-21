@@ -7,7 +7,7 @@ fn test_human_output_format_structure() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -19,7 +19,7 @@ fn test_human_output_summary_format() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let output_str = String::from_utf8(output).unwrap();
@@ -37,7 +37,7 @@ fn test_human_output_no_matches_case() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.nonexistent.entitlement.key");
     
     cmd.assert()
@@ -53,7 +53,7 @@ fn test_entitlement_line_format() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let output_str = String::from_utf8(output).unwrap();
@@ -76,7 +76,7 @@ fn test_quiet_mode_suppresses_warnings() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--quiet")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()

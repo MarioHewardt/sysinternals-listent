@@ -15,7 +15,7 @@ fn test_interrupt_handling_basic() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     // For now, just verify the command can run successfully
     // Real interrupt testing would require integration with signal handling
@@ -31,7 +31,7 @@ fn test_interrupt_flag_in_json_output() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();
@@ -52,7 +52,7 @@ fn test_interrupt_shows_partial_results() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -75,7 +75,7 @@ fn test_interrupt_graceful_cleanup() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();

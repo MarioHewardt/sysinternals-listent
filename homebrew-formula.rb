@@ -2,7 +2,7 @@
 # This would be submitted to homebrew-core or maintained in a tap
 
 class Listent < Formula
-  desc "Fast command-line tool to discover and list code signing entitlements for macOS executable binaries"
+  desc "Fast Sysinternals command-line tool to discover and list code signing entitlements for macOS executable binaries"
   homepage "https://github.com/sysinternals/listent"
   url "https://github.com/sysinternals/listent/archive/v1.0.0.tar.gz"
   sha256 "TBD" # This would be calculated from the release tarball

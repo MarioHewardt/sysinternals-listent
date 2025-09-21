@@ -7,7 +7,7 @@ fn test_no_matches_human_output() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.definitely.nonexistent.entitlement.xyz");
     
     cmd.assert()
@@ -22,7 +22,7 @@ fn test_no_matches_json_output() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap())
+       .arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.definitely.nonexistent.entitlement.xyz");
     
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -43,7 +43,7 @@ fn test_no_matches_exit_code_success() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.definitely.nonexistent.entitlement.xyz");
     
     // Zero matches should still exit with code 0 (success)
@@ -55,7 +55,7 @@ fn test_no_matches_includes_summary() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.definitely.nonexistent.entitlement.xyz");
     
     cmd.assert()
@@ -70,7 +70,7 @@ fn test_empty_directory_no_matches() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()

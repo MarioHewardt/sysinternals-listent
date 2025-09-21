@@ -6,7 +6,7 @@ use tempfile::TempDir;
 #[test]
 fn test_invalid_path_returns_error() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg("/nonexistent/path/12345");
+    cmd.arg("/nonexistent/path/12345");
     
     cmd.assert()
         .failure()
@@ -21,7 +21,7 @@ fn test_path_not_directory_returns_error() {
     fs::write(&file_path, "test content").unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(file_path.to_str().unwrap());
+    cmd.arg(file_path.to_str().unwrap());
     
     cmd.assert()
         .failure()
@@ -47,7 +47,7 @@ fn test_duplicate_entitlements_accepted() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
     

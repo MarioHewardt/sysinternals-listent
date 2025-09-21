@@ -11,9 +11,10 @@ pub mod ipc;
 pub mod launchd;
 pub mod logging;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::signal;
 use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
@@ -23,60 +24,54 @@ use crate::daemon::ipc::IpcServer;
 use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
 
-/// Check if a process with given PID is running
-fn is_process_running(pid: u32) -> bool {
+/// Check if a listent daemon process is already running
+fn is_daemon_running() -> bool {
     use std::process::Command;
     
-    // Use kill -0 to check if process exists without actually killing it
-    Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false)
-}
-
-/// Write PID file and ensure daemon isn't already running
-fn write_pid_file(pid_file: &std::path::Path) -> Result<()> {
-    // Check if PID file already exists
-    if pid_file.exists() {
-        let existing_pid_str = std::fs::read_to_string(pid_file)
-            .context("Failed to read existing PID file")?;
-        
-        if let Ok(existing_pid) = existing_pid_str.trim().parse::<u32>() {
-            if is_process_running(existing_pid) {
-                anyhow::bail!(
-                    "Daemon already running with PID {}. Use 'pkill -f listent' to stop it first.",
-                    existing_pid
-                );
+    // Look for listent processes with daemon flags
+    let output = Command::new("pgrep")
+        .args(["-f", "listent"])
+        .output();
+    
+    match output {
+        Ok(result) => {
+            if result.status.success() && !result.stdout.is_empty() {
+                // Get all listent PIDs and check their command lines
+                let pids: Vec<u32> = String::from_utf8_lossy(&result.stdout)
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<u32>().ok())
+                    .collect();
+                
+                let current_pid = std::process::id();
+                
+                // Check each PID to see if it's a daemon process
+                for pid in pids {
+                    if pid == current_pid {
+                        continue; // Skip current process
+                    }
+                    
+                    // Check command line arguments
+                    if let Ok(cmd_output) = Command::new("ps")
+                        .args(["-p", &pid.to_string(), "-o", "args="])
+                        .output()
+                    {
+                        let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
+                        // Only match actual listent processes, not sudo commands
+                        if cmd_line.contains("listent") && 
+                           cmd_line.contains("--daemon") && 
+                           cmd_line.contains("--monitor") &&
+                           !cmd_line.contains("sudo") {
+                            return true;
+                        }
+                    }
+                }
+                false
             } else {
-                // Process is dead, clean up stale PID file
-                std::fs::remove_file(pid_file)
-                    .context("Failed to remove stale PID file")?;
+                false
             }
         }
+        Err(_) => false,
     }
-    
-    // Create directory if it doesn't exist
-    if let Some(parent) = pid_file.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create PID directory: {}", parent.display()))?;
-    }
-    
-    // Write current process PID
-    let current_pid = std::process::id();
-    std::fs::write(pid_file, current_pid.to_string())
-        .with_context(|| format!("Failed to write PID file: {}", pid_file.display()))?;
-    
-    Ok(())
-}
-
-/// Clean up PID file on daemon shutdown
-fn cleanup_pid_file(pid_file: &std::path::Path) -> Result<()> {
-    if pid_file.exists() {
-        std::fs::remove_file(pid_file)
-            .with_context(|| format!("Failed to remove PID file: {}", pid_file.display()))?;
-    }
-    Ok(())
 }
 
 /// Daemon runtime state
@@ -148,13 +143,14 @@ pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> 
         run_daemon_process(config_path).await
     } else {
         // We're the parent - spawn child and exit
-        spawn_daemon_child(config_path)
+        spawn_daemon_child(config_path).await
     }
 }
 
 /// Spawn daemon child process and exit parent
-fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
-    // Load configuration to get PID file path
+/// Spawn daemon as detached child process
+async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
+    // Load configuration
     let config = if let Some(ref path) = config_path {
         DaemonConfiguration::load_from_file(path)?
     } else {
@@ -162,24 +158,10 @@ fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     };
     
     // Check if daemon is already running BEFORE spawning
-    let pid_file = &config.daemon.pid_file;
-    if pid_file.exists() {
-        let existing_pid_str = std::fs::read_to_string(pid_file)
-            .context("Failed to read existing PID file")?;
-        
-        if let Ok(existing_pid) = existing_pid_str.trim().parse::<u32>() {
-            if is_process_running(existing_pid) {
-                anyhow::bail!(
-                    "Daemon already running with PID {}. Use 'pkill -f listent' to stop it first.",
-                    existing_pid
-                );
-            } else {
-                // Process is dead, clean up stale PID file
-                std::fs::remove_file(pid_file)
-                    .context("Failed to remove stale PID file")?;
-                println!("Cleaned up stale PID file from previous daemon instance");
-            }
-        }
+    if is_daemon_running() {
+        anyhow::bail!(
+            "Daemon already running. Use 'pkill -f listent' to stop it first."
+        );
     }
     
     let current_exe = std::env::current_exe()
@@ -197,12 +179,25 @@ fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     cmd.spawn()
         .context("Failed to spawn daemon child process")?;
     
-    println!("✅ listent daemon started successfully");
-    println!("  PID file: {}", pid_file.display());
-    println!("  Polling interval: {}s", config.daemon.polling_interval);
-    println!("  IPC socket: {}", IPC_SOCKET_PATH);
-    println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
-    Ok(())
+    println!("🚀 listent daemon starting...");
+    
+    // Wait a moment for the child to start, then verify it's running
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    
+    if is_daemon_running() {
+        println!("✅ listent daemon started successfully");
+        println!("  Polling interval: {}s", config.daemon.polling_interval);
+        println!("  IPC socket: {}", IPC_SOCKET_PATH);
+        println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
+        println!("  Check status: listent daemon-status");
+        println!("  Stop daemon: listent daemon-stop");
+        Ok(())
+    } else {
+        eprintln!("❌ Failed to start listent daemon");
+        eprintln!("   The daemon process exited unexpectedly");
+        eprintln!("   Check logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
+        bail!("Daemon startup failed")
+    }
 }
 
 /// Run the actual daemon process (called by child after fork)
@@ -213,10 +208,6 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     } else {
         DaemonConfiguration::default()
     };
-
-    // Write PID file immediately upon daemon startup
-    write_pid_file(&config.daemon.pid_file)
-        .context("Failed to write PID file")?;
 
     // Create daemon state
     let socket_path = PathBuf::from(IPC_SOCKET_PATH);
@@ -233,11 +224,15 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     let shutdown_signal = setup_signal_handlers();
 
     // Start IPC server in background
-    let ipc_task = if let Some(ref mut ipc_server) = daemon_state.ipc_server {
+    let ipc_task = if let Some(ref mut _ipc_server) = daemon_state.ipc_server {
         let mut server_clone = IpcServer::new(socket_path)?;
+        // Try to start the IPC server - if it fails, we should fail fast
+        server_clone.start().await.context("Failed to start IPC server")?;
+        
         Some(tokio::spawn(async move {
-            if let Err(e) = server_clone.start().await {
-                eprintln!("❌ IPC server error: {}", e);
+            // Server is already started, just keep it running
+            loop {
+                tokio::time::sleep(Duration::from_secs(1)).await;
             }
         }))
     } else {
@@ -256,6 +251,9 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
             }
         })
     };
+
+    // Log successful startup after all tasks are initialized
+    // TODO: Add proper success logging method to DaemonLogger
 
     // Wait for shutdown signal
     tokio::select! {
@@ -278,10 +276,6 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     if let Some(ref mut ipc_server) = daemon_state.ipc_server {
         ipc_server.stop()?;
     }
-
-    // Clean up PID file on shutdown
-    cleanup_pid_file(&config.daemon.pid_file)
-        .context("Failed to cleanup PID file during shutdown")?;
 
     Ok(())
 }
@@ -427,14 +421,9 @@ async fn scan_current_processes(config: &PollingConfiguration) -> Result<std::co
             Err(_) => Vec::new(), // Continue with empty entitlements if extraction fails
         };
         
-        // Apply entitlement filters if specified
-        if !config.entitlement_filters.is_empty() {
-            let matches_filter = config.entitlement_filters.iter().any(|filter| {
-                entitlements.iter().any(|ent| ent.contains(filter))
-            });
-            if !matches_filter {
-                continue;
-            }
+        // Apply entitlement filters if specified using consistent pattern matching
+        if !crate::entitlements::pattern_matcher::entitlements_match_filters(&entitlements, &config.entitlement_filters) {
+            continue;
         }
         
         // Create monitored process

@@ -9,7 +9,7 @@ fn test_json_output_structure() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();
@@ -41,7 +41,7 @@ fn test_json_result_entry_structure() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();
@@ -68,7 +68,7 @@ fn test_json_no_extra_fields() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();

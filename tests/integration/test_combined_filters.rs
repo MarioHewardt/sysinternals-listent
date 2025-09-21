@@ -7,7 +7,7 @@ fn test_path_and_entitlement_filters_combined() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
     
     cmd.assert()
@@ -24,8 +24,8 @@ fn test_combined_filters_logical_and() {
     let temp2 = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp1.path().to_str().unwrap())
-       .arg("--path").arg(temp2.path().to_str().unwrap())
+    cmd.arg(temp1.path().to_str().unwrap())
+       .arg(temp2.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--entitlement").arg("com.apple.security.network.client");
     
@@ -41,12 +41,12 @@ fn test_combined_filters_restrictive_result() {
     
     // First get count with just path filter
     let mut cmd1 = Command::cargo_bin("listent").unwrap();
-    cmd1.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd1.arg(temp.path().to_str().unwrap());
     let output1 = cmd1.assert().success().get_output().stdout.clone();
     
     // Then get count with path + entitlement filter
     let mut cmd2 = Command::cargo_bin("listent").unwrap();
-    cmd2.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd2.arg(temp.path().to_str().unwrap())
         .arg("--entitlement").arg("com.nonexistent.entitlement");
     let output2 = cmd2.assert().success().get_output().stdout.clone();
     
@@ -63,7 +63,7 @@ fn test_all_filter_types_together() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--json")
        .arg("--quiet");

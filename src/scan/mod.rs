@@ -18,6 +18,53 @@ pub struct DiscoveredBinary {
     pub path: PathBuf,
 }
 
+/// Fast file counting (like find) - only uses filesystem metadata
+fn count_files_in_directory_with_interrupt(path: &Path, interrupted: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<usize> {
+    let mut count = 0;
+    
+    for entry in fs::read_dir(path)? {
+        // Check for interruption frequently
+        if interrupted.load(std::sync::atomic::Ordering::Relaxed) {
+            return Ok(count); // Return partial count on interrupt
+        }
+        
+        let entry = entry?;
+        let entry_path = entry.path();
+        
+        // Count files and symlinks that point to files (consistent with processing logic)
+        if entry_path.is_file() {
+            count += 1;
+        } else if entry_path.is_dir() {
+            count += count_files_in_directory_with_interrupt(&entry_path, interrupted)?;
+        }
+    }
+    
+    Ok(count)
+}
+
+/// Fast counting of total files in all scan paths with interrupt support
+pub fn count_total_files_with_interrupt(scan_paths: &[String], interrupted: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<usize> {
+    let mut total = 0;
+    
+    for path_str in scan_paths {
+        // Check for interruption between directories
+        if interrupted.load(std::sync::atomic::Ordering::Relaxed) {
+            return Ok(total); // Return partial count on interrupt
+        }
+        
+        let path = Path::new(path_str);
+        if path.exists() {
+            if path.is_file() {
+                total += 1;
+            } else if path.is_dir() {
+                total += count_files_in_directory_with_interrupt(path, interrupted)?;
+            }
+        }
+    }
+    
+    Ok(total)
+}
+
 /// Scan a list of directories for executable binaries
 pub fn scan_directories(paths: &[String]) -> Result<Vec<DiscoveredBinary>> {
     let mut binaries = Vec::new();
@@ -30,16 +77,90 @@ pub fn scan_directories(paths: &[String]) -> Result<Vec<DiscoveredBinary>> {
                 if let Some(binary) = check_file(path) {
                     binaries.push(binary);
                 }
-            } else if path.is_dir() {
-                // Directory case - scan recursively
-                scan_directory_recursive(path, &mut binaries)?;
+            } else {
+                // Directory case
+                let mut dir_binaries = scan_directory(path)?;
+                binaries.append(&mut dir_binaries);
             }
         }
     }
     
     // Sort for deterministic ordering
     binaries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(binaries)
+}
+
+/// Scan a list of directories for executable binaries with progress callbacks
+pub fn scan_directories_with_progress<F, G, H>(
+    paths: &[String], 
+    interrupted: &std::sync::Arc<std::sync::atomic::AtomicBool>,
+    mut start_callback: F, 
+    mut process_callback: G, 
+    mut complete_callback: H
+) -> Result<()>
+where
+    F: FnMut(&str),
+    G: FnMut(Vec<DiscoveredBinary>) -> Result<()>,
+    H: FnMut(&str),
+{
+    for path_str in paths {
+        let path = Path::new(path_str);
+        
+        // Start callback for this directory
+        start_callback(path_str);
+        
+        if path.exists() {
+            let mut dir_binaries = Vec::new();
+            
+            if path.is_file() {
+                // Single file case
+                if let Some(binary) = check_file(path) {
+                    dir_binaries.push(binary);
+                }
+            } else {
+                // Directory case
+                dir_binaries = scan_directory(path)?;
+            }
+            
+            // Sort directory results for deterministic ordering
+            dir_binaries.sort_by(|a, b| a.path.cmp(&b.path));
+            
+            // Process the binaries (this allows caller to handle entitlement extraction)
+            process_callback(dir_binaries)?;
+        } else {
+            // Process empty list for non-existent directory
+            process_callback(vec![])?;
+        }
+        
+        // Complete callback for this directory
+        complete_callback(path_str);
+        
+        // Check for interruption between directories
+        if interrupted.load(std::sync::atomic::Ordering::Relaxed) {
+            break;
+        }
+    }
     
+    Ok(())
+}
+
+/// Scan a single directory for binaries
+pub fn scan_single_directory(path: &Path) -> Result<Vec<DiscoveredBinary>> {
+    let mut binaries = Vec::new();
+    scan_directory_recursive(path, &mut binaries)?;
+    binaries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(binaries)
+}
+
+/// Check a single file to see if it's a binary
+pub fn check_single_file(path: &Path) -> Option<DiscoveredBinary> {
+    check_file(path)
+}
+
+/// Scan a single directory for binaries
+fn scan_directory(path: &Path) -> Result<Vec<DiscoveredBinary>> {
+    let mut binaries = Vec::new();
+    scan_directory_recursive(path, &mut binaries)?;
     Ok(binaries)
 }
 

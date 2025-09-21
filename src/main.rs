@@ -28,71 +28,70 @@ fn main() -> Result<()> {
 fn run_scan_mode() -> Result<()> {
     let config = cli::parse_args()?;
     
-    // Set up interrupt handling
+    // Set up interrupt handling using signal-hook
     let interrupted = Arc::new(AtomicBool::new(false));
-    let interrupted_clone = interrupted.clone();
-
-    ctrlc::set_handler(move || {
-        interrupted_clone.store(true, Ordering::SeqCst);
-    })?;
     
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGINT, interrupted.clone());
-    let _ = signal_hook::flag::register(signal_hook::consts::SIGTERM, interrupted.clone());
+    // Register signal handlers for SIGINT and SIGTERM
+    signal_hook::flag::register(signal_hook::consts::SIGINT, interrupted.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, interrupted.clone())?;
     
     let start_time = Instant::now();
     
-    // Scan directories for binaries
-    let discovered_binaries = scan::scan_directories(&config.scan_paths)?;
+    // Progress indicator for animated scanning
+    let mut progress = if !config.quiet_mode {
+        Some(output::progress::ScanProgress::new())
+    } else {
+        None
+    };
     
     let mut results = Vec::new();
     let mut scanned = 0;
     let mut matched = 0;
     let mut skipped_unreadable = 0;
     
-    for binary in discovered_binaries {
-        // Check for interruption
+    // Fast count total files (like find command) with interrupt support
+    let total_files = scan::count_total_files_with_interrupt(&config.scan_paths, &interrupted)
+        .context("Failed to count total files")?;
+    
+    // Check if interrupted during counting
+    if interrupted.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+    
+    // Start progress with total file count
+    if let Some(ref mut progress) = progress {
+        progress.start_scanning(total_files);
+    }
+    
+    // Process files one by one
+    for path_str in &config.scan_paths {
+        let path = std::path::Path::new(path_str);
+        if path.exists() {
+            // Update progress to show current top-level directory (only once per directory)
+            if let Some(ref mut progress) = progress {
+                progress.set_current_directory(path);
+            }
+            
+            if path.is_file() {
+                // Single file case
+                process_single_file(path, &config, &mut results, &mut scanned, &mut matched, 
+                                  &mut skipped_unreadable, &mut progress, &interrupted)?;
+            } else {
+                // Directory case
+                process_directory_files(path, &config, &mut results, &mut scanned, &mut matched,
+                                      &mut skipped_unreadable, &mut progress, &interrupted)?;
+            }
+        }
+        
+        // Check for interruption between directories
         if interrupted.load(Ordering::Relaxed) {
             break;
         }
-        
-        scanned += 1;
-        
-        // Progress indicator for long operations
-        if !config.quiet_mode && scanned % 100 == 0 {
-            eprintln!("Processed {} files...", scanned);
-        }
-        
-        // Extract entitlements
-        match entitlements::extract_entitlements(&binary.path) {
-            Ok(entitlement_map) => {
-                // Apply entitlement filters if specified
-                let filtered_entitlements = if config.filters.entitlements.is_empty() {
-                    entitlement_map
-                } else {
-                    entitlement_map.into_iter()
-                        .filter(|(key, _)| config.filters.entitlements.contains(key))
-                        .collect()
-                };
-                
-                // Only include binaries that have entitlements (and match filters)
-                if !filtered_entitlements.is_empty() {
-                    matched += 1;
-                    results.push(models::BinaryResult {
-                        path: binary.path.to_string_lossy().to_string(),
-                        entitlement_count: filtered_entitlements.len(),
-                        entitlements: filtered_entitlements,
-                    });
-                }
-            },
-            Err(err) => {
-                // Count as skipped if we can't read the entitlements
-                skipped_unreadable += 1;
-                if !config.quiet_mode {
-                    eprintln!("Warning: Could not extract entitlements from {}: {}", 
-                             binary.path.display(), err);
-                }
-            }
-        }
+    }
+
+    // Complete progress indicator
+    if let Some(mut progress) = progress {
+        progress.complete_scanning();
     }
     
     let duration_ms = start_time.elapsed().as_millis() as u64;
@@ -115,6 +114,139 @@ fn run_scan_mode() -> Result<()> {
         output::format_human(&output)?;
     }
 
+    Ok(())
+}
+
+/// Process a single file, checking if it's a binary and extracting entitlements
+fn process_single_file(
+    path: &std::path::Path,
+    config: &models::ScanConfig,
+    results: &mut Vec<models::BinaryResult>,
+    scanned: &mut usize,
+    matched: &mut usize,
+    skipped_unreadable: &mut usize,
+    progress: &mut Option<output::progress::ScanProgress>,
+    interrupted: &Arc<AtomicBool>
+) -> Result<()> {
+    // Check for interruption
+    if interrupted.load(Ordering::Relaxed) {
+        return Ok(());
+    }
+    
+    // Check if this file is a binary
+    if let Some(binary) = scan::check_single_file(path) {
+        process_binary(binary, config, results, scanned, matched, skipped_unreadable, progress)?;
+    } else {
+        // Non-binary file, just increment skipped count
+        if let Some(ref mut progress) = progress {
+            progress.increment_skipped();
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process all files in a directory recursively
+fn process_directory_files(
+    dir_path: &std::path::Path,
+    config: &models::ScanConfig,
+    results: &mut Vec<models::BinaryResult>,
+    scanned: &mut usize,
+    matched: &mut usize,
+    skipped_unreadable: &mut usize,
+    progress: &mut Option<output::progress::ScanProgress>,
+    interrupted: &Arc<AtomicBool>
+) -> Result<()> {
+    use std::fs;
+    
+    for entry in fs::read_dir(dir_path)? {
+        // Check for interruption at the start of each directory entry
+        if interrupted.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        
+        let entry = entry?;
+        let path = entry.path();
+        
+        if path.is_file() {
+            process_single_file(&path, config, results, scanned, matched, 
+                              skipped_unreadable, progress, interrupted)?;
+            
+            // Check for interruption after processing each file
+            if interrupted.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+        } else if path.is_dir() {
+            // Recursively process subdirectories without updating progress directory name
+            process_directory_files(&path, config, results, scanned, matched,
+                                  skipped_unreadable, progress, interrupted)?;
+            
+            // Check for interruption after processing each subdirectory
+            if interrupted.load(Ordering::Relaxed) {
+                return Ok(());
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Process a binary file and extract entitlements
+fn process_binary(
+    binary: scan::DiscoveredBinary,
+    config: &models::ScanConfig,
+    results: &mut Vec<models::BinaryResult>,
+    scanned: &mut usize,
+    matched: &mut usize,
+    skipped_unreadable: &mut usize,
+    progress: &mut Option<output::progress::ScanProgress>
+) -> Result<()> {
+    *scanned += 1;
+    
+    // Update progress
+    if let Some(ref mut progress) = progress {
+        progress.increment_scanned();
+    }
+    
+    // Extract entitlements
+    match entitlements::extract_entitlements(&binary.path) {
+        Ok(entitlement_map) => {
+            // Get list of entitlement keys for pattern matching
+            let entitlement_keys: Vec<String> = entitlement_map.keys().cloned().collect();
+            
+            // Check if any entitlements match the filters using consistent pattern matching
+            if entitlements::pattern_matcher::entitlements_match_filters(&entitlement_keys, &config.filters.entitlements) {
+                // Apply entitlement filters to output (only show matching entitlements)
+                let filtered_entitlements = if config.filters.entitlements.is_empty() {
+                    entitlement_map
+                } else {
+                    entitlement_map.into_iter()
+                        .filter(|(key, _)| {
+                            config.filters.entitlements.iter().any(|filter| {
+                                entitlements::pattern_matcher::matches_entitlement_filter(key, filter)
+                            })
+                        })
+                        .collect()
+                };
+                
+                *matched += 1;
+                results.push(models::BinaryResult {
+                    path: binary.path.to_string_lossy().to_string(),
+                    entitlement_count: filtered_entitlements.len(),
+                    entitlements: filtered_entitlements,
+                });
+            }
+        },
+        Err(err) => {
+            // Count as skipped if we can't read the entitlements
+            *skipped_unreadable += 1;
+            if !config.quiet_mode {
+                eprintln!("Warning: Could not extract entitlements from {}: {}", 
+                         binary.path.display(), err);
+            }
+        }
+    }
+    
     Ok(())
 }
 
@@ -145,6 +277,9 @@ fn run_subcommand(command: cli::Commands) -> Result<()> {
         },
         cli::Commands::DaemonStatus => {
             show_daemon_status()
+        },
+        cli::Commands::DaemonStop => {
+            stop_daemon_process()
         },
         cli::Commands::UpdateConfig { updates } => {
             update_daemon_config(updates)
@@ -224,39 +359,40 @@ fn uninstall_daemon_service() -> Result<()> {
 /// Show daemon service status
 fn show_daemon_status() -> Result<()> {
     use crate::daemon::launchd::LaunchDPlist;
-    use crate::daemon::config::DaemonConfiguration;
 
     println!("📊 Checking listent daemon status...");
 
-    // Load configuration to get PID file path
-    let config = DaemonConfiguration::default();
-    let pid_file = &config.daemon.pid_file;
-
-    // Check PID file status
-    let pid_file_status = if pid_file.exists() {
-        match std::fs::read_to_string(pid_file) {
-            Ok(pid_str) => {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    // Check if process is actually running
-                    let is_running = std::process::Command::new("kill")
-                        .args(["-0", &pid.to_string()])
+    // Check for running listent daemon processes
+    let daemon_running = {
+        let output = std::process::Command::new("pgrep")
+            .args(["-f", "listent"])
+            .output();
+        
+        let mut found_daemon = false;
+        if let Ok(result) = output {
+            if result.status.success() && !result.stdout.is_empty() {
+                // Check each listent process to see if it's a daemon
+                let pids: Vec<u32> = String::from_utf8_lossy(&result.stdout)
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<u32>().ok())
+                    .collect();
+                
+                for pid in pids {
+                    // Check command line arguments
+                    if let Ok(cmd_output) = std::process::Command::new("ps")
+                        .args(["-p", &pid.to_string(), "-o", "args="])
                         .output()
-                        .map(|output| output.status.success())
-                        .unwrap_or(false);
-                    
-                    if is_running {
-                        Some((pid, true))
-                    } else {
-                        Some((pid, false))
+                    {
+                        let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
+                        if cmd_line.contains("--daemon") && cmd_line.contains("--monitor") {
+                            found_daemon = true;
+                            break;
+                        }
                     }
-                } else {
-                    None
                 }
             }
-            Err(_) => None,
         }
-    } else {
-        None
+        found_daemon
     };
 
     // Check LaunchD service status
@@ -270,20 +406,14 @@ fn show_daemon_status() -> Result<()> {
     println!("\n🔍 Daemon Status Report:");
     println!("========================");
 
-    match pid_file_status {
-        Some((pid, true)) => {
-            println!("✅ PID File: {} (PID: {}, RUNNING)", pid_file.display(), pid);
-        }
-        Some((pid, false)) => {
-            println!("⚠️  PID File: {} (PID: {}, STALE - process not running)", pid_file.display(), pid);
-        }
-        None => {
-            println!("❌ PID File: {} (not found or invalid)", pid_file.display());
-        }
+    if daemon_running {
+        println!("✅ Process Status: listent daemon RUNNING");
+    } else {
+        println!("❌ Process Status: No listent daemon found");
     }
 
-    match service_status {
-        Some(ref status) => {
+    match &service_status {
+        Some(status) => {
             println!("✅ LaunchD Service: {} (found)", status.label);
             if status.is_running() {
                 println!("🟢 Service Status: RUNNING (PID: {})", status.pid.unwrap());
@@ -298,27 +428,24 @@ fn show_daemon_status() -> Result<()> {
 
     // Provide helpful next steps
     println!("\n💡 Next Steps:");
-    match (pid_file_status, &service_status) {
-        (Some((_, true)), Some(status)) if status.is_running() => {
-            println!("✓ Daemon is running normally");
+    match (daemon_running, &service_status) {
+        (true, Some(status)) if status.is_running() => {
+            println!("✓ Daemon is running normally via LaunchD");
             println!("  • View logs: log show --predicate 'subsystem == \"com.microsoft.sysinternals.listent\"' --info");
             println!("  • Stop daemon: listent uninstall-daemon");
         }
-        (Some((_, true)), None) => {
+        (true, None) => {
             println!("✓ Daemon running directly (not as LaunchD service)");
             println!("  • View logs: log show --predicate 'subsystem == \"com.microsoft.sysinternals.listent\"' --info");
-            println!("  • Stop daemon: pkill -f listent");
+            println!("  • Stop daemon: listent daemon-stop");
             println!("  • Install as service: listent install-daemon");
         }
-        (Some((_, false)), _) => {
-            println!("⚠ Stale PID file detected - daemon may have crashed");
-            println!("  • Clean restart: pkill -f listent && listent install-daemon");
+        (false, Some(_)) => {
+            println!("⚠ LaunchD service exists but no daemon process found");
+            println!("  • Service may be starting up or crashed");
+            println!("  • Restart: listent uninstall-daemon && listent install-daemon");
         }
-        (None, Some(_)) => {
-            println!("⚠ LaunchD service exists but no PID file - daemon may be starting");
-            println!("  • Wait a moment and check again, or restart: listent uninstall-daemon && listent install-daemon");
-        }
-        (None, None) => {
+        (false, None) => {
             println!("ℹ No daemon running");
             println!("  • Start daemon: listent install-daemon");
         }
@@ -326,6 +453,108 @@ fn show_daemon_status() -> Result<()> {
             println!("⚠ Inconsistent state detected");
             println!("  • Clean restart recommended: listent uninstall-daemon && listent install-daemon");
         }
+    }
+
+    Ok(())
+}
+
+/// Stop running daemon process
+fn stop_daemon_process() -> Result<()> {
+    println!("🛑 Stopping listent daemon...");
+
+    // Find running daemon processes
+    let output = std::process::Command::new("pgrep")
+        .args(["-f", "listent"])
+        .output()
+        .context("Failed to search for listent processes")?;
+
+    if !output.status.success() || output.stdout.is_empty() {
+        println!("❌ No listent daemon processes found");
+        return Ok(());
+    }
+
+    // Get all listent PIDs and check their command lines
+    let pids: Vec<u32> = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect();
+
+    let mut daemon_pids = Vec::new();
+    let current_pid = std::process::id();
+
+    for pid in pids {
+        if pid == current_pid {
+            continue; // Skip current process
+        }
+
+        // Check if this is a daemon process
+        if let Ok(cmd_output) = std::process::Command::new("ps")
+            .args(["-p", &pid.to_string(), "-o", "args="])
+            .output()
+        {
+            let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
+            // Only match actual listent daemon processes, not sudo commands
+            if cmd_line.contains("listent") && 
+               cmd_line.contains("--daemon") && 
+               cmd_line.contains("--monitor") &&
+               !cmd_line.contains("sudo") {
+                daemon_pids.push(pid);
+            }
+        }
+    }
+
+    if daemon_pids.is_empty() {
+        println!("❌ No listent daemon processes found");
+        return Ok(());
+    }
+
+    // Stop each daemon process gracefully with SIGTERM
+    let mut any_failed = false;
+    for pid in &daemon_pids {
+        let result = std::process::Command::new("kill")
+            .args(["-TERM", &pid.to_string()])
+            .output();
+
+        if let Err(_) = result {
+            any_failed = true;
+        } else if let Ok(output) = result {
+            if !output.status.success() {
+                any_failed = true;
+            }
+        }
+    }
+
+    if any_failed {
+        println!("❌ Failed to stop some daemon processes");
+        return Ok(());
+    }
+
+    // Wait a moment for graceful shutdown
+    std::thread::sleep(std::time::Duration::from_secs(2));
+
+    // Check if processes are still running
+    let mut still_running = Vec::new();
+    for pid in &daemon_pids {
+        if let Ok(output) = std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])  // Signal 0 just checks if process exists
+            .output()
+        {
+            if output.status.success() {
+                still_running.push(*pid);
+            }
+        }
+    }
+
+    if still_running.is_empty() {
+        println!("✅ Daemon stopped successfully");
+    } else {
+        // Force kill remaining processes
+        for pid in still_running {
+            let _ = std::process::Command::new("kill")
+                .args(["-KILL", &pid.to_string()])
+                .output();
+        }
+        println!("✅ Daemon stopped (forced)");
     }
 
     Ok(())

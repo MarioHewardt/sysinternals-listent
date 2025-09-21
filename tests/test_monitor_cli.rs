@@ -52,7 +52,7 @@ fn test_monitor_help_text() {
 fn test_monitor_with_invalid_arguments() {
     // Test monitor with invalid path
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "-p", "/nonexistent"])
+    cmd.args(&["--monitor", "/nonexistent"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("does not exist"));

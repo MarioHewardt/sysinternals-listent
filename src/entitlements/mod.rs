@@ -5,12 +5,15 @@
 //! - Parsing entitlement plists 
 //! - Error handling for unsigned/malformed binaries
 //! - Performance optimization for batch operations
+//! - Pattern matching for entitlement filtering
 
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Command;
 use anyhow::{Result, anyhow};
 use serde_json::Value;
+
+pub mod pattern_matcher;
 
 /// Extract entitlements from a binary file using codesign
 pub fn extract_entitlements(binary_path: &Path) -> Result<HashMap<String, Value>> {

@@ -8,7 +8,7 @@ fn test_help_includes_required_options() {
     
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("--path"))
+        .stdout(predicate::str::contains("PATH"))  // Positional argument, not --path
         .stdout(predicate::str::contains("--entitlement"))
         .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--quiet"))

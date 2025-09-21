@@ -7,7 +7,7 @@ fn test_single_entitlement_filter() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
     
     cmd.assert()
@@ -20,7 +20,7 @@ fn test_multiple_entitlement_filters() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--entitlement").arg("com.apple.security.network.client");
     
@@ -36,7 +36,7 @@ fn test_entitlement_filter_logical_or() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--entitlement").arg("com.apple.security.network.client");
     
@@ -51,7 +51,7 @@ fn test_entitlement_filter_exact_match() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security");  // Partial key
     
     // Should not match binaries with "com.apple.security.app-sandbox"
@@ -64,7 +64,7 @@ fn test_nonexistent_entitlement_filter() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap())
+    cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.nonexistent.entitlement.key.12345");
     
     cmd.assert()

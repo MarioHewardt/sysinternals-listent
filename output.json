@@ -1,0 +1,34 @@
+{
+  "results": [
+    {
+      "path": "/System/Applications/Calculator.app/Contents/MacOS/Calculator",
+      "entitlements": {
+        "com.apple.security.network.client": true,
+        "com.apple.security.exception.shared-preference.read-only": "[array: <string>com.apple.calculator</string>]",
+        "com.apple.private.coreservices.canmaplsdatabase": true,
+        "com.apple.security.print": true,
+        "com.apple.security.temporary-exception.files.absolute-path.read-only": "[array: <string>/Library/Managed Preferences/</string>]",
+        "com.apple.security.app-sandbox": true,
+        "file-read-data": true,
+        "file-write-data": true,
+        "user-preference-read": true,
+        "user-preference-write": true,
+        "com.apple.private.hid.client.event-dispatch.internal": true,
+        "com.apple.security.files.user-selected.read-write": true,
+        "com.apple.runningboard.terminateprocess": true
+      },
+      "entitlement_count": 13
+    },
+    {
+      "path": "/System/Applications/Calculator.app/Contents/PlugIns/CalculatorWidget.appex/Contents/MacOS/CalculatorWidget",
+      "entitlements": {},
+      "entitlement_count": 0
+    }
+  ],
+  "summary": {
+    "scanned": 2,
+    "matched": 2,
+    "skipped_unreadable": 0,
+    "duration_ms": 252
+  }
+}

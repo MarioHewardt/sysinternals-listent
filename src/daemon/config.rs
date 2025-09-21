@@ -22,8 +22,6 @@ pub struct DaemonSettings {
     pub polling_interval: f64,
     /// Whether daemon should auto-start with launchd
     pub auto_start: bool,
-    /// Path to PID file
-    pub pid_file: PathBuf,
 }
 
 /// Process monitoring configuration
@@ -92,7 +90,6 @@ impl DaemonConfiguration {
             daemon: DaemonSettings {
                 polling_interval: 1.0,
                 auto_start: true,
-                pid_file: PathBuf::from("/var/run/listent/daemon.pid"),
             },
             monitoring: MonitoringSettings {
                 path_filters: vec![
@@ -124,9 +121,6 @@ impl DaemonConfiguration {
             "daemon.auto_start" => {
                 self.daemon.auto_start = value.parse()
                     .with_context(|| format!("Invalid boolean value: {}", value))?;
-            },
-            "daemon.pid_file" => {
-                self.daemon.pid_file = PathBuf::from(value);
             },
             _ => {
                 anyhow::bail!("Unknown configuration key: {}", key);
@@ -161,12 +155,6 @@ impl DaemonConfiguration {
 
     /// Create configuration directories if they don't exist
     pub fn ensure_directories(&self) -> Result<()> {
-        // Create PID file directory
-        if let Some(pid_dir) = self.daemon.pid_file.parent() {
-            std::fs::create_dir_all(pid_dir)
-                .with_context(|| format!("Failed to create PID directory: {}", pid_dir.display()))?;
-        }
-
         // Create socket directory (using hardcoded path)
         let socket_path = std::path::PathBuf::from(crate::constants::IPC_SOCKET_PATH);
         if let Some(socket_dir) = socket_path.parent() {

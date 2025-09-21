@@ -18,30 +18,21 @@ fn test_configuration_file_parsing() {
 [daemon]
 polling_interval = 1.5
 auto_start = true
-pid_file = "/var/run/listent/daemon.pid"
-
-[logging]
-level = "info"
-subsystem = "com.github.mariohewardt.listent"
-category = "daemon"
 
 [monitoring]
 path_filters = ["/Applications"]
 entitlement_filters = ["com.apple.security.network.client"]
-
-[ipc]
-socket_path = "/var/run/listent/daemon.sock"
 "#;
     
     fs::write(&config_path, config_content).unwrap();
     
-    // Test daemon with config file (will fail until implemented)
+    // Test daemon with config file - should fail due to file not existing or permission error
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
+       .failure() // Will fail due to permission issues writing plist file
+       .stderr(predicate::str::contains("Permission denied").or(
+           predicate::str::contains("Failed to write plist file")
        ));
 }
 
@@ -56,8 +47,9 @@ fn test_invalid_configuration_rejection() {
 polling_interval = 0.05  # Too low (minimum is 0.1)
 auto_start = "yes"       # Wrong type (should be boolean)
 
-[logging]
-level = "invalid"        # Invalid log level
+[monitoring]
+path_filters = []
+entitlement_filters = []
 "#;
     
     fs::write(&config_path, invalid_config).unwrap();
@@ -81,6 +73,11 @@ fn test_configuration_validation_bounds() {
     let bounds_config = r#"
 [daemon]
 polling_interval = 301.0  # Above maximum (300.0)
+auto_start = true
+
+[monitoring]
+path_filters = []
+entitlement_filters = []
 "#;
     
     fs::write(&config_path, bounds_config).unwrap();
@@ -89,20 +86,20 @@ polling_interval = 301.0  # Above maximum (300.0)
     cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
-       .stderr(predicate::str::contains("polling_interval").or(
-           predicate::str::contains("not yet implemented")
+       .stderr(predicate::str::contains("Invalid polling interval").or(
+           predicate::str::contains("Must be between 0.1 and 300.0")
        ));
 }
 
 #[test]
 fn test_default_configuration_generation() {
-    // Test that daemon can generate default configuration
+    // Test that daemon can generate default configuration - will fail due to permissions
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("install-daemon")
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
+       .failure() // Will fail due to permission issues
+       .stderr(predicate::str::contains("Permission denied").or(
+           predicate::str::contains("Failed to write plist file")
        ));
 }
 

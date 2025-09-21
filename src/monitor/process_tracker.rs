@@ -49,21 +49,17 @@ impl ProcessTracker {
             .collect()
     }
 
-    /// Apply entitlement filters to processes
+    /// Apply entitlement filters to processes using consistent pattern matching
     pub fn apply_entitlement_filters(
         processes: Vec<MonitoredProcess>,
         entitlement_filters: &[String],
     ) -> Vec<MonitoredProcess> {
-        if entitlement_filters.is_empty() {
-            return processes;
-        }
-
+        use crate::entitlements::pattern_matcher;
+        
         processes
             .into_iter()
             .filter(|process| {
-                entitlement_filters.iter().any(|filter| {
-                    process.entitlements.iter().any(|ent| ent.contains(filter))
-                })
+                pattern_matcher::entitlements_match_filters(&process.entitlements, entitlement_filters)
             })
             .collect()
     }

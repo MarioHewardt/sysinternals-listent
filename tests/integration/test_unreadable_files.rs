@@ -16,7 +16,7 @@ fn test_unreadable_files_counted() {
     let _ = fs::set_permissions(&unreadable_file, fs::Permissions::from_mode(0o000));
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     // Should complete successfully even with unreadable files
     cmd.assert()
@@ -29,7 +29,7 @@ fn test_unreadable_files_warning_in_normal_mode() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     // In normal mode, warnings should go to stderr
     // For now, just verify the command runs successfully
@@ -42,7 +42,7 @@ fn test_unreadable_files_suppressed_in_quiet_mode() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--quiet")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     // Quiet mode should suppress warnings
     cmd.assert()
@@ -55,7 +55,7 @@ fn test_unreadable_count_in_summary() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -68,7 +68,7 @@ fn test_unreadable_count_in_json() {
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.arg("--json")
-       .arg("--path").arg(temp.path().to_str().unwrap());
+       .arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
     let json_str = String::from_utf8(output).unwrap();
@@ -91,7 +91,7 @@ fn test_scan_continues_after_unreadable_files() {
     let _ = fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000));
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     // Should complete successfully
     cmd.assert()

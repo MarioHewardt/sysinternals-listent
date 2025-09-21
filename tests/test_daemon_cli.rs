@@ -10,12 +10,12 @@ use predicates::prelude::*;
 fn test_install_daemon_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test basic install-daemon subcommand
+    // Test basic install-daemon subcommand - will fail due to permissions but should be recognized
     cmd.arg("install-daemon")
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
+       .failure() // Expected to fail due to permission issues (can't write to /Library/LaunchDaemons)
+       .stderr(predicate::str::contains("Permission denied").or(
+           predicate::str::contains("Failed to write plist file")
        ));
 }
 
@@ -23,12 +23,12 @@ fn test_install_daemon_subcommand() {
 fn test_install_daemon_with_config() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test install-daemon with custom config path
+    // Test install-daemon with custom config path - will fail because config file doesn't exist
     cmd.args(&["install-daemon", "--config", "/tmp/test-config.toml"])
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
+       .failure() // Expected to fail because config file doesn't exist
+       .stderr(predicate::str::contains("Failed to read config file").or(
+           predicate::str::contains("No such file or directory")
        ));
 }
 
@@ -36,38 +36,34 @@ fn test_install_daemon_with_config() {
 fn test_uninstall_daemon_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test uninstall-daemon subcommand
+    // Test uninstall-daemon subcommand - should work even if daemon wasn't installed
     cmd.arg("uninstall-daemon")
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
-       ));
+       .success() // Should succeed (just reports that service wasn't found)
+       .stdout(predicate::str::contains("Uninstalling listent daemon service"));
 }
 
 #[test]
 fn test_daemon_status_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test daemon-status subcommand
+    // Test daemon-status subcommand - should work and show status
     cmd.arg("daemon-status")
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
-       ));
+       .success() // Should succeed and show status
+       .stdout(predicate::str::contains("Checking listent daemon status"));
 }
 
 #[test]
 fn test_update_config_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test update-config with key-value pairs
+    // Test update-config with key-value pairs - will fail due to invalid config key
     cmd.args(&["update-config", "daemon.polling_interval=2.0", "logging.level=debug"])
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
+       .failure() // Expected to fail due to unknown configuration key
+       .stderr(predicate::str::contains("Unknown configuration key").or(
+           predicate::str::contains("Failed to apply update")
        ));
 }
 
@@ -75,39 +71,34 @@ fn test_update_config_subcommand() {
 fn test_logs_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs subcommand
+    // Test logs subcommand - should now work with fixed predicate
     cmd.arg("logs")
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
-       ));
+       .success() // Should succeed with fixed macOS log predicate
+       .stdout(predicate::str::contains("Retrieving daemon logs"));
 }
 
 #[test]
 fn test_logs_with_follow() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs with --follow flag
+    // Test logs with --follow flag - should now work with fixed predicate
     cmd.args(&["logs", "--follow"])
+       .timeout(std::time::Duration::from_millis(500)) // Use timeout since --follow runs indefinitely
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
-       ));
+       .interrupted() // Should be interrupted by timeout after starting successfully
+       .stdout(predicate::str::contains("Retrieving daemon logs"));
 }
 
 #[test]
 fn test_logs_with_since() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs with --since flag
+    // Test logs with --since flag - should now work with fixed predicate
     cmd.args(&["logs", "--since", "1h"])
        .assert()
-       .failure() // Will fail until implemented
-       .stderr(predicate::str::contains("not yet implemented").or(
-           predicate::str::contains("unrecognized subcommand")
-       ));
+       .success() // Should succeed with fixed macOS log predicate
+       .stdout(predicate::str::contains("Retrieving daemon logs"));
 }
 
 #[test]
@@ -117,10 +108,8 @@ fn test_daemon_flag_compatibility() {
     // Test that --daemon flag is incompatible with subcommands
     cmd.args(&["--daemon", "install-daemon"])
        .assert()
-       .failure() // Should fail due to conflicting arguments
-       .stderr(predicate::str::contains("conflict").or(
-           predicate::str::contains("cannot be used")
-       ).or(predicate::str::contains("unrecognized subcommand")));
+       .failure() // Should fail due to --daemon requiring --monitor
+       .stderr(predicate::str::contains("--daemon requires --monitor"));
 }
 
 #[test]

@@ -5,9 +5,12 @@
 //! - JSON output conforming to contracts/output-json-schema.json
 //! - Summary statistics generation
 //! - Quiet/verbose mode behavior
+//! - Progress indicators for long-running operations
 
 use anyhow::Result;
 use crate::models::EntitlementScanOutput;
+
+pub mod progress;
 
 /// Format output in human-readable format
 pub fn format_human(output: &EntitlementScanOutput) -> Result<()> {

@@ -8,7 +8,7 @@ fn test_single_path_filter() {
     let temp = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -21,8 +21,8 @@ fn test_multiple_path_filters() {
     let temp2 = TempDir::new().unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp1.path().to_str().unwrap())
-       .arg("--path").arg(temp2.path().to_str().unwrap());
+    cmd.arg(temp1.path().to_str().unwrap())
+       .arg(temp2.path().to_str().unwrap());
     
     cmd.assert()
         .success()
@@ -39,7 +39,7 @@ fn test_path_filter_restricts_scope() {
     fs::write(subdir.join("testfile"), "content").unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg(temp.path().to_str().unwrap());
+    cmd.arg(temp.path().to_str().unwrap());
     
     // Should only scan the specified temp directory, not system-wide
     cmd.assert()
@@ -57,7 +57,7 @@ fn test_path_filter_restricts_scope() {
 fn test_path_filter_with_tilde_expansion() {
     // Test that ~/Applications is properly expanded
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--path").arg("~/Applications");
+    cmd.arg("~/Applications");
     
     // Should not fail on path expansion
     cmd.assert()
