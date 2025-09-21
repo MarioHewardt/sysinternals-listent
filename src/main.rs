@@ -224,26 +224,107 @@ fn uninstall_daemon_service() -> Result<()> {
 /// Show daemon service status
 fn show_daemon_status() -> Result<()> {
     use crate::daemon::launchd::LaunchDPlist;
+    use crate::daemon::config::DaemonConfiguration;
 
     println!("📊 Checking listent daemon status...");
 
+    // Load configuration to get PID file path
+    let config = DaemonConfiguration::default();
+    let pid_file = &config.daemon.pid_file;
+
+    // Check PID file status
+    let pid_file_status = if pid_file.exists() {
+        match std::fs::read_to_string(pid_file) {
+            Ok(pid_str) => {
+                if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                    // Check if process is actually running
+                    let is_running = std::process::Command::new("kill")
+                        .args(["-0", &pid.to_string()])
+                        .output()
+                        .map(|output| output.status.success())
+                        .unwrap_or(false);
+                    
+                    if is_running {
+                        Some((pid, true))
+                    } else {
+                        Some((pid, false))
+                    }
+                } else {
+                    None
+                }
+            }
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
+    // Check LaunchD service status
     let current_exe = std::env::current_exe()
         .context("Could not determine current executable path")?;
 
     let plist = LaunchDPlist::new(&current_exe);
-    
-    match plist.get_service_status()? {
-        Some(status) => {
-            println!("✅ Service found: {}", status.label);
+    let service_status = plist.get_service_status()?;
+
+    // Display comprehensive status
+    println!("\n🔍 Daemon Status Report:");
+    println!("========================");
+
+    match pid_file_status {
+        Some((pid, true)) => {
+            println!("✅ PID File: {} (PID: {}, RUNNING)", pid_file.display(), pid);
+        }
+        Some((pid, false)) => {
+            println!("⚠️  PID File: {} (PID: {}, STALE - process not running)", pid_file.display(), pid);
+        }
+        None => {
+            println!("❌ PID File: {} (not found or invalid)", pid_file.display());
+        }
+    }
+
+    match service_status {
+        Some(ref status) => {
+            println!("✅ LaunchD Service: {} (found)", status.label);
             if status.is_running() {
-                println!("🟢 Status: RUNNING (PID: {})", status.pid.unwrap());
+                println!("🟢 Service Status: RUNNING (PID: {})", status.pid.unwrap());
             } else {
-                println!("🔴 Status: STOPPED (Exit code: {})", status.status_code);
+                println!("🔴 Service Status: STOPPED (Exit code: {})", status.status_code);
             }
         },
         None => {
-            println!("❌ Service not found or not installed");
-            println!("   Use 'listent install-daemon' to install the service");
+            println!("❌ LaunchD Service: not found or not installed");
+        }
+    }
+
+    // Provide helpful next steps
+    println!("\n💡 Next Steps:");
+    match (pid_file_status, &service_status) {
+        (Some((_, true)), Some(status)) if status.is_running() => {
+            println!("✓ Daemon is running normally");
+            println!("  • View logs: log show --predicate 'subsystem == \"com.microsoft.sysinternals.listent\"' --info");
+            println!("  • Stop daemon: listent uninstall-daemon");
+        }
+        (Some((_, true)), None) => {
+            println!("✓ Daemon running directly (not as LaunchD service)");
+            println!("  • View logs: log show --predicate 'subsystem == \"com.microsoft.sysinternals.listent\"' --info");
+            println!("  • Stop daemon: pkill -f listent");
+            println!("  • Install as service: listent install-daemon");
+        }
+        (Some((_, false)), _) => {
+            println!("⚠ Stale PID file detected - daemon may have crashed");
+            println!("  • Clean restart: pkill -f listent && listent install-daemon");
+        }
+        (None, Some(_)) => {
+            println!("⚠ LaunchD service exists but no PID file - daemon may be starting");
+            println!("  • Wait a moment and check again, or restart: listent uninstall-daemon && listent install-daemon");
+        }
+        (None, None) => {
+            println!("ℹ No daemon running");
+            println!("  • Start daemon: listent install-daemon");
+        }
+        _ => {
+            println!("⚠ Inconsistent state detected");
+            println!("  • Clean restart recommended: listent uninstall-daemon && listent install-daemon");
         }
     }
 

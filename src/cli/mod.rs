@@ -49,7 +49,7 @@ pub struct Args {
     pub quiet: bool,
 
     /// Enable real-time process monitoring mode
-    #[arg(long)]
+    #[arg(short, long)]
     pub monitor: bool,
 
     /// Polling interval in seconds (0.1 - 300.0) [default: 1.0]
@@ -61,7 +61,7 @@ pub struct Args {
     pub daemon: bool,
 
     /// Path to daemon configuration file
-    #[arg(long, value_name = "FILE")]
+    #[arg(short, long, value_name = "FILE")]
     pub config: Option<PathBuf>,
 }
 

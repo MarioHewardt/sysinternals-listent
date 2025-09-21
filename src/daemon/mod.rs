@@ -23,6 +23,62 @@ use crate::daemon::ipc::IpcServer;
 use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
 
+/// Check if a process with given PID is running
+fn is_process_running(pid: u32) -> bool {
+    use std::process::Command;
+    
+    // Use kill -0 to check if process exists without actually killing it
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+/// Write PID file and ensure daemon isn't already running
+fn write_pid_file(pid_file: &std::path::Path) -> Result<()> {
+    // Check if PID file already exists
+    if pid_file.exists() {
+        let existing_pid_str = std::fs::read_to_string(pid_file)
+            .context("Failed to read existing PID file")?;
+        
+        if let Ok(existing_pid) = existing_pid_str.trim().parse::<u32>() {
+            if is_process_running(existing_pid) {
+                anyhow::bail!(
+                    "Daemon already running with PID {}. Use 'pkill -f listent' to stop it first.",
+                    existing_pid
+                );
+            } else {
+                // Process is dead, clean up stale PID file
+                std::fs::remove_file(pid_file)
+                    .context("Failed to remove stale PID file")?;
+            }
+        }
+    }
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = pid_file.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create PID directory: {}", parent.display()))?;
+    }
+    
+    // Write current process PID
+    let current_pid = std::process::id();
+    std::fs::write(pid_file, current_pid.to_string())
+        .with_context(|| format!("Failed to write PID file: {}", pid_file.display()))?;
+    
+    Ok(())
+}
+
+/// Clean up PID file on daemon shutdown
+fn cleanup_pid_file(pid_file: &std::path::Path) -> Result<()> {
+    if pid_file.exists() {
+        std::fs::remove_file(pid_file)
+            .with_context(|| format!("Failed to remove PID file: {}", pid_file.display()))?;
+    }
+    Ok(())
+}
+
 /// Daemon runtime state
 pub struct DaemonState {
     /// Current configuration
@@ -98,6 +154,34 @@ pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> 
 
 /// Spawn daemon child process and exit parent
 fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
+    // Load configuration to get PID file path
+    let config = if let Some(ref path) = config_path {
+        DaemonConfiguration::load_from_file(path)?
+    } else {
+        DaemonConfiguration::default()
+    };
+    
+    // Check if daemon is already running BEFORE spawning
+    let pid_file = &config.daemon.pid_file;
+    if pid_file.exists() {
+        let existing_pid_str = std::fs::read_to_string(pid_file)
+            .context("Failed to read existing PID file")?;
+        
+        if let Ok(existing_pid) = existing_pid_str.trim().parse::<u32>() {
+            if is_process_running(existing_pid) {
+                anyhow::bail!(
+                    "Daemon already running with PID {}. Use 'pkill -f listent' to stop it first.",
+                    existing_pid
+                );
+            } else {
+                // Process is dead, clean up stale PID file
+                std::fs::remove_file(pid_file)
+                    .context("Failed to remove stale PID file")?;
+                println!("Cleaned up stale PID file from previous daemon instance");
+            }
+        }
+    }
+    
     let current_exe = std::env::current_exe()
         .context("Failed to get current executable path")?;
     
@@ -114,6 +198,10 @@ fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
         .context("Failed to spawn daemon child process")?;
     
     println!("✅ listent daemon started successfully");
+    println!("  PID file: {}", pid_file.display());
+    println!("  Polling interval: {}s", config.daemon.polling_interval);
+    println!("  IPC socket: {}", IPC_SOCKET_PATH);
+    println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
     Ok(())
 }
 
@@ -125,6 +213,10 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     } else {
         DaemonConfiguration::default()
     };
+
+    // Write PID file immediately upon daemon startup
+    write_pid_file(&config.daemon.pid_file)
+        .context("Failed to write PID file")?;
 
     // Create daemon state
     let socket_path = PathBuf::from(IPC_SOCKET_PATH);
@@ -186,6 +278,10 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     if let Some(ref mut ipc_server) = daemon_state.ipc_server {
         ipc_server.stop()?;
     }
+
+    // Clean up PID file on shutdown
+    cleanup_pid_file(&config.daemon.pid_file)
+        .context("Failed to cleanup PID file during shutdown")?;
 
     Ok(())
 }
