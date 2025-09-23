@@ -347,6 +347,14 @@ See "Expansion Triggers" in `CONSTITUTION.md` before adding complexity.
 - **Integration APIs**: Webhooks and external system integration
 - **Performance optimization**: Parallel processing and caching
 
+## Security
+
+For vulnerability reporting, supported versions, and a condensed risk overview see [`SECURITY.md`](SECURITY.md).
+
+A detailed, expanded threat model (architecture, STRIDE analysis, mitigations, and roadmap) is available at [`docs/threat-model.md`](docs/threat-model.md).
+
+If you believe you have found a security issue, please follow the disclosure process in `SECURITY.md` rather than opening a public issue.
+
 ## License
 
 MIT OR Apache-2.0

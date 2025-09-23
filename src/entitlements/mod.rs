@@ -1,8 +1,8 @@
 //! Entitlement extraction module
 //!
 //! Handles:
-//! - Extracting entitlements from Mach-O binaries using codesign
-//! - Parsing entitlement plists 
+//! - Extracting entitlements from Mach-O binaries using optimized plist parsing
+//! - Fallback to manual XML parsing for compatibility
 //! - Error handling for unsigned/malformed binaries
 //! - Performance optimization for batch operations
 //! - Pattern matching for entitlement filtering
@@ -14,9 +14,28 @@ use anyhow::{Result, anyhow};
 use serde_json::Value;
 
 pub mod pattern_matcher;
+pub mod native;
 
-/// Extract entitlements from a binary file using codesign
+/// Extract entitlements from a binary file
+/// 
+/// Uses optimized plist parsing for better performance,
+/// with fallback to manual XML parsing if needed.
 pub fn extract_entitlements(binary_path: &Path) -> Result<HashMap<String, Value>> {
+    // Try optimized plist parsing first
+    match native::extract_entitlements_optimized(binary_path) {
+        Ok(entitlements) => return Ok(entitlements),
+        Err(_) => {
+            // Fall back to manual XML parsing if plist parsing fails
+            // This provides compatibility for edge cases
+        }
+    }
+    
+    // Fallback to manual XML parsing (original implementation)
+    extract_entitlements_codesign(binary_path)
+}
+
+/// Extract entitlements using codesign command-line tool (fallback method)
+pub fn extract_entitlements_codesign(binary_path: &Path) -> Result<HashMap<String, Value>> {
     // Call codesign to extract entitlements
     let output = Command::new("codesign")
         .arg("-d")

@@ -1,0 +1,75 @@
+A fast Sysinternals command-line tool to discover and list code signing entitlements for macOS executable binaries.
+
+OPERATING MODES:
+  1. Static Scan Mode (default)    - Scan files/directories for entitlements
+     Usage: listent [PATH...] [--entitlement KEY] [--json] [--quiet]
+     
+  2. Real-time Monitor Mode        - Monitor new processes for entitlements  
+     Usage: listent --monitor [--interval SECONDS] [PATH...] [--entitlement KEY]
+     
+  3. Background Daemon Mode        - Run monitoring as persistent daemon
+     Usage: listent --daemon --monitor [--config FILE]
+     Management: listent {install-daemon|daemon-status|daemon-stop}
+
+ENTITLEMENT FILTERING EXAMPLES:
+  listent /usr/bin -e "com.apple.security.network.client"     # Exact match
+  listent /Applications -e "com.apple.security.*"              # All security entitlements
+  listent /usr/bin /Applications -e "*network*"                # Multiple paths + patterns
+  listent -e "com.apple.private.*" -e "*.debug.*"            # Multiple patterns (OR logic)
+
+NOTE: Always quote patterns containing wildcards (*?[]) to prevent shell expansion.
+
+Usage: listent [OPTIONS] [PATH]... [COMMAND]
+
+Commands:
+  install-daemon    Install daemon service with LaunchD
+  uninstall-daemon  Uninstall daemon service from LaunchD
+  daemon-status     Check daemon service status
+  daemon-stop       Stop running daemon process
+  update-config     Update daemon configuration at runtime
+  logs              View daemon logs
+  help              Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+
+Scan Target:
+  [PATH]...
+          Directory or file paths to scan (default: /Applications)
+          
+          Supports multiple paths: listent /path1 /path2 /path3
+
+Filtering:
+  -e, --entitlement <KEY>
+          Filter by entitlement key (exact match or glob pattern)
+          
+          Supports exact matching (e.g., "com.apple.security.network.client") and glob patterns (e.g., "com.apple.security.*", "*network*", "*.client").
+          
+          Multiple filters: -e key1 -e key2 OR -e key1,key2 (logical OR)
+
+Output:
+  -j, --json
+          Output in JSON format
+
+  -q, --quiet
+          Suppress warnings about unreadable files
+
+Monitoring:
+  -m, --monitor
+          Enable real-time process monitoring mode
+
+      --interval <SECONDS>
+          Polling interval in seconds (0.1 - 300.0) [monitoring mode only]
+          
+          [default: 1.0]
+
+Daemon:
+      --daemon
+          Run as background daemon (requires --monitor)
+
+  -c, --config <FILE>
+          Path to daemon configuration file
