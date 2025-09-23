@@ -252,7 +252,15 @@ fn process_binary(
 
 fn run_monitor_mode() -> Result<()> {
     let config = cli::parse_monitor_config()?;
-    monitor::polling::start_monitoring(config)
+    
+    // Set up interrupt handling using signal-hook (same as scan mode)
+    let interrupted = Arc::new(AtomicBool::new(false));
+    
+    // Register signal handlers for SIGINT and SIGTERM
+    signal_hook::flag::register(signal_hook::consts::SIGINT, interrupted.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, interrupted.clone())?;
+    
+    monitor::polling::start_monitoring_with_interrupt(config, interrupted)
 }
 
 fn run_daemon_mode() -> Result<()> {

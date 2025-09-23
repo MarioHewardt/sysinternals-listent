@@ -13,8 +13,32 @@ pub fn start_monitoring(config: PollingConfiguration) -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
 
-    // Set up signal handler using signal-hook
+    // Set up signal handler using signal-hook (same approach as scan mode)
     signal_hook::flag::register(signal_hook::consts::SIGINT, r.clone())?;
+    signal_hook::flag::register(signal_hook::consts::SIGTERM, r.clone())?;
+
+    start_monitoring_internal(config, running)
+}
+
+/// Start monitoring processes with external interrupt flag (called from main.rs)
+pub fn start_monitoring_with_interrupt(config: PollingConfiguration, interrupted: Arc<AtomicBool>) -> Result<()> {
+    // Convert interrupted (false = continue) to running (true = continue)
+    let running = Arc::new(AtomicBool::new(true));
+    
+    // Create a thread to monitor the interrupted flag and update running
+    let running_monitor = running.clone();
+    std::thread::spawn(move || {
+        while !interrupted.load(Ordering::Relaxed) {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        running_monitor.store(false, Ordering::SeqCst);
+    });
+
+    start_monitoring_internal(config, running)
+}
+
+/// Internal monitoring implementation
+fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBool>) -> Result<()> {
 
     // Initialize unified logging
     let _logger = init_logger().ok(); // Graceful degradation if logging fails
