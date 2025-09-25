@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::signal;
 use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
-use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY};
+use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY, format_permission_error};
 use crate::daemon::logging::DaemonLogger;
 use crate::monitor::process_tracker::ProcessTracker;
 
@@ -303,7 +303,7 @@ pub async fn install_launchd_service(
     // Check if we can write to the LaunchDaemons directory (safer than checking uid)
     let launch_daemons_dir = std::path::Path::new("/Library/LaunchDaemons");
     if !launch_daemons_dir.exists() || std::fs::metadata(launch_daemons_dir).is_err() {
-        bail!("Cannot access /Library/LaunchDaemons directory. LaunchD service installation requires root privileges. Run with sudo.");
+        bail!(format_permission_error("/Library/LaunchDaemons directory", "access"));
     }
     
     // Try to create a test file to check write permissions
@@ -314,7 +314,7 @@ pub async fn install_launchd_service(
             let _ = std::fs::remove_file(&test_file);
         }
         Err(_) => {
-            bail!("Cannot write to /Library/LaunchDaemons directory. LaunchD service installation requires root privileges. Run with sudo.");
+            bail!(format_permission_error("/Library/LaunchDaemons directory", "write to"));
         }
     }
     

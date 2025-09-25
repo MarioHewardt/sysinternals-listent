@@ -2,7 +2,7 @@
 //!
 //! Handles TOML configuration parsing, validation, and atomic updates
 
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use std::path::PathBuf;
 
 /// Main daemon configuration structure

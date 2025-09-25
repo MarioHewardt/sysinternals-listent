@@ -8,14 +8,15 @@ fn test_help_includes_required_options() {
     
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("--path"))
         .stdout(predicate::str::contains("--entitlement"))
         .stdout(predicate::str::contains("--json"))
         .stdout(predicate::str::contains("--quiet"))
-        .stdout(predicate::str::contains("--verbose"))
-        .stdout(predicate::str::contains("--version"))
-        .stdout(predicate::str::contains("--summary"))
-        .stdout(predicate::str::contains("--no-summary"));
+        .stdout(predicate::str::contains("--monitor"))
+        .stdout(predicate::str::contains("--interval"))
+        .stdout(predicate::str::contains("--daemon"))
+        .stdout(predicate::str::contains("--launchd"))
+        .stdout(predicate::str::contains("--help"))
+        .stdout(predicate::str::contains("--version"));
 }
 
 #[test]

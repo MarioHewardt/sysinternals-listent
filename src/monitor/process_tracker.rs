@@ -1,3 +1,8 @@
+//! Process state tracking for detecting new processes
+//!
+//! Provides the `ProcessTracker` struct for managing process snapshots
+//! and detecting newly spawned processes between polling cycles.
+
 use crate::models::{MonitoredProcess, ProcessSnapshot};
 
 /// Manages process state tracking between polling cycles

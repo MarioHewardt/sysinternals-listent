@@ -25,7 +25,7 @@ fn test_interval_parameter_validation() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid polling interval"))
-        .stderr(predicate::str::contains("Must be between 0.1 and 300.0"));
+        .stderr(predicate::str::contains("Must be between 0.1 and 300 seconds"));
 
     // Test invalid interval - too high
     let mut cmd = Command::cargo_bin("listent").unwrap();
@@ -33,7 +33,7 @@ fn test_interval_parameter_validation() {
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid polling interval"))
-        .stderr(predicate::str::contains("Must be between 0.1 and 300.0"));
+        .stderr(predicate::str::contains("Must be between 0.1 and 300 seconds"));
 }
 
 #[test]

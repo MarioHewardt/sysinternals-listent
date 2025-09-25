@@ -19,7 +19,7 @@ fn test_launchd_permission_check() {
     
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("LaunchD service installation requires root privileges"));
+        .stderr(predicate::str::contains("Try running with appropriate permissions"));
 }
 
 #[test]

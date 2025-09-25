@@ -14,6 +14,17 @@ use std::time::Instant;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+/// Context for file processing operations to reduce parameter passing
+struct ProcessingContext<'a> {
+    config: &'a models::ScanConfig,
+    results: &'a mut Vec<models::BinaryResult>,
+    scanned: &'a mut usize,
+    matched: &'a mut usize,
+    skipped_unreadable: &'a mut usize,
+    progress: &'a mut Option<output::progress::ScanProgress>,
+    interrupted: &'a Arc<AtomicBool>,
+}
+
 fn main() -> Result<()> {
     // Determine execution mode from CLI arguments
     match cli::get_execution_mode()? {
@@ -70,14 +81,23 @@ fn run_scan_mode() -> Result<()> {
                 progress.set_current_directory(path);
             }
             
+            // Create processing context
+            let mut ctx = ProcessingContext {
+                config: &config,
+                results: &mut results,
+                scanned: &mut scanned,
+                matched: &mut matched,
+                skipped_unreadable: &mut skipped_unreadable,
+                progress: &mut progress,
+                interrupted: &interrupted,
+            };
+            
             if path.is_file() {
                 // Single file case
-                process_single_file(path, &config, &mut results, &mut scanned, &mut matched, 
-                                  &mut skipped_unreadable, &mut progress, &interrupted)?;
+                process_single_file(path, &mut ctx)?;
             } else {
                 // Directory case
-                process_directory_files(path, &config, &mut results, &mut scanned, &mut matched,
-                                      &mut skipped_unreadable, &mut progress, &interrupted)?;
+                process_directory_files(path, &mut ctx)?;
             }
         }
         
@@ -116,27 +136,18 @@ fn run_scan_mode() -> Result<()> {
 }
 
 /// Process a single file, checking if it's a binary and extracting entitlements
-fn process_single_file(
-    path: &std::path::Path,
-    config: &models::ScanConfig,
-    results: &mut Vec<models::BinaryResult>,
-    scanned: &mut usize,
-    matched: &mut usize,
-    skipped_unreadable: &mut usize,
-    progress: &mut Option<output::progress::ScanProgress>,
-    interrupted: &Arc<AtomicBool>
-) -> Result<()> {
+fn process_single_file(path: &std::path::Path, ctx: &mut ProcessingContext) -> Result<()> {
     // Check for interruption
-    if interrupted.load(Ordering::Relaxed) {
+    if ctx.interrupted.load(Ordering::Relaxed) {
         return Ok(());
     }
     
     // Check if this file is a binary
     if let Some(binary) = scan::check_single_file(path) {
-        process_binary(binary, config, results, scanned, matched, skipped_unreadable, progress)?;
+        process_binary(binary, ctx)?;
     } else {
         // Non-binary file, just increment skipped count
-        if let Some(ref mut progress) = progress {
+        if let Some(ref mut progress) = ctx.progress {
             progress.increment_skipped();
         }
     }
@@ -145,21 +156,12 @@ fn process_single_file(
 }
 
 /// Process all files in a directory recursively
-fn process_directory_files(
-    dir_path: &std::path::Path,
-    config: &models::ScanConfig,
-    results: &mut Vec<models::BinaryResult>,
-    scanned: &mut usize,
-    matched: &mut usize,
-    skipped_unreadable: &mut usize,
-    progress: &mut Option<output::progress::ScanProgress>,
-    interrupted: &Arc<AtomicBool>
-) -> Result<()> {
+fn process_directory_files(dir_path: &std::path::Path, ctx: &mut ProcessingContext) -> Result<()> {
     use std::fs;
     
     for entry in fs::read_dir(dir_path)? {
         // Check for interruption at the start of each directory entry
-        if interrupted.load(Ordering::Relaxed) {
+        if ctx.interrupted.load(Ordering::Relaxed) {
             return Ok(());
         }
         
@@ -167,20 +169,18 @@ fn process_directory_files(
         let path = entry.path();
         
         if path.is_file() {
-            process_single_file(&path, config, results, scanned, matched, 
-                              skipped_unreadable, progress, interrupted)?;
+            process_single_file(&path, ctx)?;
             
             // Check for interruption after processing each file
-            if interrupted.load(Ordering::Relaxed) {
+            if ctx.interrupted.load(Ordering::Relaxed) {
                 return Ok(());
             }
         } else if path.is_dir() {
             // Recursively process subdirectories without updating progress directory name
-            process_directory_files(&path, config, results, scanned, matched,
-                                  skipped_unreadable, progress, interrupted)?;
+            process_directory_files(&path, ctx)?;
             
             // Check for interruption after processing each subdirectory
-            if interrupted.load(Ordering::Relaxed) {
+            if ctx.interrupted.load(Ordering::Relaxed) {
                 return Ok(());
             }
         }
@@ -190,19 +190,11 @@ fn process_directory_files(
 }
 
 /// Process a binary file and extract entitlements
-fn process_binary(
-    binary: scan::DiscoveredBinary,
-    config: &models::ScanConfig,
-    results: &mut Vec<models::BinaryResult>,
-    scanned: &mut usize,
-    matched: &mut usize,
-    skipped_unreadable: &mut usize,
-    progress: &mut Option<output::progress::ScanProgress>
-) -> Result<()> {
-    *scanned += 1;
+fn process_binary(binary: scan::DiscoveredBinary, ctx: &mut ProcessingContext) -> Result<()> {
+    *ctx.scanned += 1;
     
     // Update progress
-    if let Some(ref mut progress) = progress {
+    if let Some(ref mut progress) = ctx.progress {
         progress.increment_scanned();
     }
     
@@ -213,22 +205,22 @@ fn process_binary(
             let entitlement_keys: Vec<String> = entitlement_map.keys().cloned().collect();
             
             // Check if any entitlements match the filters using consistent pattern matching
-            if entitlements::pattern_matcher::entitlements_match_filters(&entitlement_keys, &config.filters.entitlements) {
+            if entitlements::pattern_matcher::entitlements_match_filters(&entitlement_keys, &ctx.config.filters.entitlements) {
                 // Apply entitlement filters to output (only show matching entitlements)
-                let filtered_entitlements = if config.filters.entitlements.is_empty() {
+                let filtered_entitlements = if ctx.config.filters.entitlements.is_empty() {
                     entitlement_map
                 } else {
                     entitlement_map.into_iter()
                         .filter(|(key, _)| {
-                            config.filters.entitlements.iter().any(|filter| {
+                            ctx.config.filters.entitlements.iter().any(|filter| {
                                 entitlements::pattern_matcher::matches_entitlement_filter(key, filter)
                             })
                         })
                         .collect()
                 };
                 
-                *matched += 1;
-                results.push(models::BinaryResult {
+                *ctx.matched += 1;
+                ctx.results.push(models::BinaryResult {
                     path: binary.path.to_string_lossy().to_string(),
                     entitlement_count: filtered_entitlements.len(),
                     entitlements: filtered_entitlements,
@@ -237,8 +229,8 @@ fn process_binary(
         },
         Err(err) => {
             // Count as skipped if we can't read the entitlements
-            *skipped_unreadable += 1;
-            if !config.quiet_mode {
+            *ctx.skipped_unreadable += 1;
+            if !ctx.config.quiet_mode {
                 eprintln!("Warning: Could not extract entitlements from {}: {}", 
                          binary.path.display(), err);
             }

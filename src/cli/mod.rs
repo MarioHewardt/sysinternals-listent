@@ -10,14 +10,10 @@
 
 use clap::Parser;
 use std::path::PathBuf;
-use anyhow::{Result, anyhow, Context};
-use crate::models::{ScanConfig, ScanFilters, PollingConfiguration, MonitorError};
+use anyhow::{Result, anyhow};
+use crate::models::{ScanFilters, PollingConfiguration, ScanConfig, MonitorError};
+use crate::constants::{MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL, DEFAULT_SCAN_PATHS, format_validation_error};
 use std::time::Duration;
-
-/// Default directories to scan if no paths are provided
-const DEFAULT_SCAN_PATHS: &[&str] = &[
-    "/Applications",
-];
 
 /// Command line arguments for listent
 #[derive(Parser)]
@@ -116,8 +112,10 @@ pub fn parse_args() -> Result<ScanConfig> {
 
     // Validate entitlement filters if provided
     if !args.entitlement.is_empty() {
-        crate::entitlements::pattern_matcher::validate_entitlement_filters(&args.entitlement)
-            .context("Invalid entitlement filter")?;
+        if let Err(e) = crate::entitlements::pattern_matcher::validate_entitlement_filters(&args.entitlement) {
+            return Err(anyhow::anyhow!(format_validation_error("entitlement filter", 
+                &args.entitlement.join(", "), &e.to_string())));
+        }
     }
 
     let filters = ScanFilters {
@@ -142,14 +140,16 @@ pub fn parse_monitor_config() -> Result<PollingConfiguration> {
     }
 
     // Validate interval range
-    if args.interval < 0.1 || args.interval > 300.0 {
+    if args.interval < MIN_POLLING_INTERVAL || args.interval > MAX_POLLING_INTERVAL {
         return Err(MonitorError::InvalidInterval(args.interval).into());
     }
 
     // Validate entitlement filters if provided
     if !args.entitlement.is_empty() {
-        crate::entitlements::pattern_matcher::validate_entitlement_filters(&args.entitlement)
-            .context("Invalid entitlement filter")?;
+        if let Err(e) = crate::entitlements::pattern_matcher::validate_entitlement_filters(&args.entitlement) {
+            return Err(anyhow::anyhow!(format_validation_error("entitlement filter", 
+                &args.entitlement.join(", "), &e.to_string())));
+        }
     }
 
     // Validate paths if provided
@@ -193,8 +193,8 @@ pub fn parse_daemon_config() -> Result<(f64, Vec<PathBuf>, Vec<String>, bool)> {
     let entitlements = args.entitlement;
     
     // Validate interval range (use existing --interval argument)
-    if args.interval < 0.1 || args.interval > 300.0 {
-        return Err(anyhow!("--interval must be between 0.1 and 300.0 seconds"));
+    if args.interval < MIN_POLLING_INTERVAL || args.interval > MAX_POLLING_INTERVAL {
+        return Err(anyhow!("--interval must be between {} and {} seconds", MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL));
     }
 
     // Validate paths exist
@@ -206,8 +206,10 @@ pub fn parse_daemon_config() -> Result<(f64, Vec<PathBuf>, Vec<String>, bool)> {
 
     // Validate entitlement filters if provided
     if !entitlements.is_empty() {
-        crate::entitlements::pattern_matcher::validate_entitlement_filters(&entitlements)
-            .context("Invalid entitlement filter")?;
+        if let Err(e) = crate::entitlements::pattern_matcher::validate_entitlement_filters(&entitlements) {
+            return Err(anyhow::anyhow!(format_validation_error("entitlement filter", 
+                &entitlements.join(", "), &e.to_string())));
+        }
     }
 
     Ok((args.interval, paths, entitlements, args.launchd))
@@ -216,7 +218,7 @@ pub fn parse_daemon_config() -> Result<(f64, Vec<PathBuf>, Vec<String>, bool)> {
 /// Validate CLI arguments for compatibility
 fn validate_args_compatibility(args: &Args) -> Result<()> {
     // Monitor mode specific validation (applies to both monitor and daemon modes)
-    if (args.monitor || args.daemon) && args.interval < 0.1 || args.interval > 300.0 {
+    if (args.monitor || args.daemon) && (args.interval < MIN_POLLING_INTERVAL || args.interval > MAX_POLLING_INTERVAL) {
         return Err(MonitorError::InvalidInterval(args.interval).into());
     }
 

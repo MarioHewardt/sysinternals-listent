@@ -30,15 +30,17 @@ fn test_path_not_directory_returns_error() {
 }
 
 #[test]
-fn test_quiet_and_verbose_conflict() {
+fn test_daemon_and_launchd_combination() {
+    // Test that --launchd requires --daemon
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--quiet").arg("--verbose");
+    cmd.arg("--launchd");
     
+    // Should fail if --daemon is not provided
     cmd.assert()
         .failure()
-        .stderr(predicate::str::contains("conflict")
-                .or(predicate::str::contains("cannot be used"))
-                .or(predicate::str::contains("mutually exclusive")));
+        .stderr(predicate::str::contains("--daemon")
+                .or(predicate::str::contains("launchd"))
+                .or(predicate::str::contains("requires")));
 }
 
 #[test]

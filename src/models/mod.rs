@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
+use crate::constants::{MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL};
 
 /// Represents a single binary file with its entitlements
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,7 +140,7 @@ pub struct LogEntry {
 /// Custom error types for monitoring operations
 #[derive(Debug, thiserror::Error)]
 pub enum MonitorError {
-    #[error("Invalid polling interval: {0}. Must be between 0.1 and 300.0 seconds")]
+    #[error("Invalid polling interval: {0}. Must be between {} and {} seconds", MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL)]
     InvalidInterval(f64),
 }
 
@@ -156,3 +157,6 @@ impl ProcessSnapshot {
 
 impl PollingConfiguration {
 }
+
+#[cfg(test)]
+mod tests;
