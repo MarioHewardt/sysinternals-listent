@@ -8,7 +8,7 @@
 //! - Monitor mode with real-time process detection
 //! - Help and version commands
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use std::path::PathBuf;
 use anyhow::{Result, anyhow, Context};
 use crate::models::{ScanConfig, ScanFilters, PollingConfiguration, MonitorError};
@@ -32,8 +32,7 @@ OPERATING MODES:
      Usage: listent --monitor [--interval SECONDS] [PATH...] [--entitlement KEY]
      
   3. Background Daemon Mode        - Run monitoring as persistent daemon
-     Usage: listent --daemon --monitor [--config FILE]
-     Management: listent {install-daemon|daemon-status|daemon-stop}
+     Usage: listent --daemon [--interval SECONDS] [PATH...] [--entitlement KEY]
 
 ENTITLEMENT FILTERING EXAMPLES:
   listent /usr/bin -e \"com.apple.security.network.client\"     # Exact match
@@ -43,15 +42,10 @@ ENTITLEMENT FILTERING EXAMPLES:
 
 NOTE: Always quote patterns containing wildcards (*?[]) to prevent shell expansion.")]
 pub struct Args {
-    /// Daemon management subcommands
-    #[command(subcommand)]
-    pub command: Option<Commands>,
-
-    // === SCAN TARGET OPTIONS ===
     /// Directory or file paths to scan (default: /Applications)
     /// 
     /// Supports multiple paths: listent /path1 /path2 /path3
-    #[arg(value_name = "PATH", help_heading = "Scan Target")]
+    #[arg(value_name = "PATH")]
     pub path: Vec<PathBuf>,
 
     /// Filter by entitlement key (exact match or glob pattern)
@@ -60,73 +54,39 @@ pub struct Args {
     /// glob patterns (e.g., "com.apple.security.*", "*network*", "*.client").
     /// 
     /// Multiple filters: -e key1 -e key2 OR -e key1,key2 (logical OR)
-    #[arg(short, long, value_name = "KEY", help_heading = "Filtering", value_delimiter = ',')]
+    #[arg(short, long, value_name = "KEY", value_delimiter = ',')]
     pub entitlement: Vec<String>,
 
-    // === OUTPUT OPTIONS ===
     /// Output in JSON format
-    #[arg(short, long, help_heading = "Output")]
+    #[arg(short, long)]
     pub json: bool,
 
     /// Suppress warnings about unreadable files
-    #[arg(short, long, help_heading = "Output")]
+    #[arg(short, long)]
     pub quiet: bool,
 
-    // === MONITORING MODE ===
     /// Enable real-time process monitoring mode
-    #[arg(short, long, help_heading = "Monitoring")]
+    #[arg(short, long)]
     pub monitor: bool,
 
     /// Polling interval in seconds (0.1 - 300.0) [monitoring mode only]
-    #[arg(long, default_value = "1.0", value_name = "SECONDS", help_heading = "Monitoring")]
+    #[arg(long, default_value = "1.0", value_name = "SECONDS")]
     pub interval: f64,
 
-    // === DAEMON MODE ===
-    /// Run as background daemon (requires --monitor)
-    #[arg(long, help_heading = "Daemon")]
+    /// Run as background daemon (implies --monitor)
+    #[arg(long)]
     pub daemon: bool,
 
-    /// Path to daemon configuration file
-    #[arg(short, long, value_name = "FILE", help_heading = "Daemon")]
-    pub config: Option<PathBuf>,
+    /// Install as LaunchD service (requires --daemon and sudo)
+    #[arg(long)]
+    pub launchd: bool,
 }
 
-/// Daemon management subcommands
-#[derive(Subcommand, Debug, Clone)]
-#[command(about = "Daemon service management commands")]
-pub enum Commands {
-    /// Install daemon service with LaunchD
-    InstallDaemon {
-        /// Path to configuration file
-        #[arg(long, value_name = "FILE")]
-        config: Option<PathBuf>,
-    },
-    /// Uninstall daemon service from LaunchD
-    UninstallDaemon,
-    /// Check daemon service status
-    DaemonStatus,
-    /// Stop running daemon process
-    DaemonStop,
-    /// Update daemon configuration at runtime
-    UpdateConfig {
-        /// Configuration updates in key=value format
-        updates: Vec<String>,
-    },
-    /// View daemon logs
-    Logs {
-        /// Follow log output continuously
-        #[arg(short, long)]
-        follow: bool,
-        /// Show logs since specific time (e.g., "1h", "30m", "2023-01-01 10:00")
-        #[arg(long, value_name = "TIME")]
-        since: Option<String>,
-        /// Output format (json, human)
-        #[arg(long, default_value = "human")]
-        format: String,
-    },
+impl Args {
 }
 
-/// Parse command line arguments and return scan configuration
+/// Parse command line arguments for static scan mode
+/// Parse command line arguments for static scan mode
 pub fn parse_args() -> Result<ScanConfig> {
     let args = Args::parse();
     
@@ -176,9 +136,9 @@ pub fn parse_args() -> Result<ScanConfig> {
 pub fn parse_monitor_config() -> Result<PollingConfiguration> {
     let args = Args::parse();
     
-    // Validate that monitor mode is enabled
-    if !args.monitor {
-        return Err(anyhow!("--monitor flag is required for monitor mode"));
+    // Validate that monitor mode is enabled and daemon mode is not
+    if !args.monitor || args.daemon {
+        return Err(anyhow!("--monitor flag is required for monitor mode (and --daemon must not be used)"));
     }
 
     // Validate interval range
@@ -212,31 +172,62 @@ pub fn parse_monitor_config() -> Result<PollingConfiguration> {
     })
 }
 
-/// Check if monitor mode is enabled from CLI args
-pub fn is_monitor_mode() -> bool {
+/// Parse command line arguments and return daemon configuration
+pub fn parse_daemon_config() -> Result<(f64, Vec<PathBuf>, Vec<String>, bool)> {
     let args = Args::parse();
-    args.monitor
-}
+    
+    // Validate that daemon mode is enabled
+    if !args.daemon {
+        return Err(anyhow!("--daemon flag is required for daemon mode"));
+    }
 
-/// Parse raw command line arguments without processing
-pub fn parse_args_raw() -> Result<Args> {
-    Ok(Args::parse())
+    // Use existing path and entitlement arguments (same as monitor/scan modes)
+    let paths = if args.path.is_empty() {
+        // Default to /Applications if no paths specified (consistent with scan mode)
+        vec![PathBuf::from("/Applications")]
+    } else {
+        args.path
+    };
+    
+    // Use existing entitlement arguments
+    let entitlements = args.entitlement;
+    
+    // Validate interval range (use existing --interval argument)
+    if args.interval < 0.1 || args.interval > 300.0 {
+        return Err(anyhow!("--interval must be between 0.1 and 300.0 seconds"));
+    }
+
+    // Validate paths exist
+    for path in &paths {
+        if !path.exists() {
+            return Err(anyhow!("Path does not exist: {}", path.display()));
+        }
+    }
+
+    // Validate entitlement filters if provided
+    if !entitlements.is_empty() {
+        crate::entitlements::pattern_matcher::validate_entitlement_filters(&entitlements)
+            .context("Invalid entitlement filter")?;
+    }
+
+    Ok((args.interval, paths, entitlements, args.launchd))
 }
 
 /// Validate CLI arguments for compatibility
 fn validate_args_compatibility(args: &Args) -> Result<()> {
-    // Daemon mode requires monitor mode
-    if args.daemon && !args.monitor {
-        return Err(anyhow!("--daemon requires --monitor flag"));
-    }
-
-    // Interval validation 
-    if args.interval != 1.0 && !args.monitor {
-        return Err(anyhow!("--interval requires --monitor flag"));
-    }
-
-    if args.interval < 0.1 || args.interval > 300.0 {
+    // Monitor mode specific validation (applies to both monitor and daemon modes)
+    if (args.monitor || args.daemon) && args.interval < 0.1 || args.interval > 300.0 {
         return Err(MonitorError::InvalidInterval(args.interval).into());
+    }
+
+    // Cannot use both daemon and monitor flags together
+    if args.daemon && args.monitor {
+        return Err(anyhow!("Cannot use both --daemon and --monitor flags (daemon implies monitoring)"));
+    }
+
+    // LaunchD flag requires daemon mode
+    if args.launchd && !args.daemon {
+        return Err(anyhow!("--launchd flag requires --daemon mode"));
     }
 
     Ok(())
@@ -249,17 +240,12 @@ pub fn get_execution_mode() -> Result<ExecutionMode> {
     // Validate argument compatibility
     validate_args_compatibility(&args)?;
     
-    match args.command {
-        Some(command) => Ok(ExecutionMode::Subcommand(command.clone())),
-        None => {
-            if args.daemon && args.monitor {
-                Ok(ExecutionMode::Daemon)
-            } else if args.monitor {
-                Ok(ExecutionMode::Monitor)
-            } else {
-                Ok(ExecutionMode::Scan)
-            }
-        }
+    if args.daemon {
+        Ok(ExecutionMode::Daemon)
+    } else if args.monitor {
+        Ok(ExecutionMode::Monitor)
+    } else {
+        Ok(ExecutionMode::Scan)
     }
 }
 
@@ -269,36 +255,4 @@ pub enum ExecutionMode {
     Scan,
     Monitor,
     Daemon,
-    Subcommand(Commands),
-}
-
-/// Parse configuration updates from command line arguments
-pub fn parse_config_updates(updates: &[String]) -> Result<Vec<(String, String)>> {
-    let mut parsed_updates = Vec::new();
-    
-    for update in updates {
-        if let Some((key, value)) = update.split_once('=') {
-            parsed_updates.push((key.to_string(), value.to_string()));
-        } else {
-            return Err(anyhow!("Invalid update format: '{}'. Expected format: key=value", update));
-        }
-    }
-    
-    Ok(parsed_updates)
-}
-
-/// Validate time format for log filtering
-pub fn validate_time_format(time_str: &str) -> Result<()> {
-    // Simple validation for common time formats
-    if time_str.ends_with('h') || time_str.ends_with('m') || time_str.ends_with('s') {
-        let number_part = &time_str[..time_str.len()-1];
-        number_part.parse::<u32>()
-            .map_err(|_| anyhow!("Invalid time format: {}", time_str))?;
-        Ok(())
-    } else if time_str.contains('-') && time_str.contains(':') {
-        // Basic datetime format validation (could be more robust)
-        Ok(())
-    } else {
-        Err(anyhow!("Invalid time format: {}. Use formats like '1h', '30m', or '2023-01-01 10:00'", time_str))
-    }
 }

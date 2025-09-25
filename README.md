@@ -1,120 +1,25 @@
-# listent
+# Sysinternals listent - macOS Entitlement Monitor
 
-A fast command-line tool to discover and list code signing entitlements for macOS executable binaries. Supports static scanning, real-time process monitoring, and background daemon operation.
+Sysinternals `listent` is a fast command-line tool for discovering and analyzing code signing entitlements in macOS executable binaries. Designed for security researchers, developers, and system administrators who need to audit application permissions and understand the security capabilities requested by macOS applications.
 
-## Overview
-
-`listent` recursively scans directories to find executable binaries and extracts their code signing entitlements using the `codesign` utility. It's designed for security researchers, developers, and system administrators who need to audit or understand the permissions requested by macOS applications.
+![listent Demo](assets/listent-demo.gif)
 
 ## Features
 
-### Core Capabilities
-- **Fast scanning**: Efficiently traverses directory trees with smart filtering and progress indicators
-- **Entitlement extraction**: Uses macOS `codesign` to extract entitlements from binaries  
-- **Flexible filtering**: Filter by paths and specific entitlement keys with glob pattern support
-- **Multiple output formats**: Human-readable and structured JSON output
-- **Multiple paths**: Scan multiple directories in a single command
-- **Graceful interrupts**: Clean cancellation with Ctrl+C
+- **Static Directory Scanning**: Efficiently traverse directory trees with intelligent filtering and real-time progress indicators
+- **Real-time Process Monitoring**: Monitor new processes as they launch with configurable polling intervals  
+- **Background Daemon Mode**: Persistent process monitoring with consistent CLI argument structure and macOS LaunchD integration
+- **Flexible Entitlement Filtering**: Pattern matching with glob support (`*`, `?`, `[]`) for precise entitlement discovery
+- **Multiple Output Formats**: Human-readable tables and structured JSON for automation and scripting
+- **Multi-Path Support**: Scan multiple directories simultaneously in a single operation
+- **Graceful Interruption**: Clean cancellation with Ctrl+C and proper resource cleanup
+- **Performance Optimized**: Smart file filtering, minimal I/O operations, and efficient memory usage
+- **Security Focused**: Local processing only, no network communication, respects system permissions
 
-### Operating Modes
-
-#### 1. Static Scan Mode (Default)
-Scan files and directories for entitlements:
-```bash
-# Scan default location (/Applications)
-listent
-
-# Scan specific paths
-listent /usr/bin /Applications
-
-# Filter by entitlement patterns
-listent -e "com.apple.security.*"
-listent -e "*network*" -e "*debug*"
-
-# JSON output for automation
-listent /usr/bin -e "*security*" --json
-```
-
-#### 2. Real-time Monitor Mode
-Monitor new processes for entitlements:
-```bash
-# Monitor all new processes
-listent --monitor
-
-# Monitor with custom polling interval
-listent --monitor --interval 0.5
-
-# Monitor specific entitlements only
-listent --monitor -e "com.apple.security.network.*"
-```
-
-#### 3. Background Daemon Mode
-Run monitoring as a persistent system service:
-```bash
-# Install and start daemon
-listent install-daemon
-
-# Check daemon status
-listent daemon-status
-
-# Update configuration without restart
-listent update-config --interval 2.0
-
-# View daemon logs
-listent logs --follow
-
-# Stop and uninstall
-listent daemon-stop
-listent uninstall-daemon
-```
-
-## Examples
-
-### Static Scanning
-```bash
-# Basic scan with progress
-listent /Applications
-
-# Multi-directory scan with filtering
-listent /usr/bin /Applications -e "*security*"
-
-# Find all network-related entitlements
-listent -e "*network*" --json | jq '.results[].entitlements'
-
-# Scan quietly (suppress warnings)
-listent /System/Applications --quiet
-```
-
-### Process Monitoring
-```bash
-# Monitor all processes with 2-second intervals
-listent --monitor --interval 2.0
-
-# Monitor only security-related entitlements
-listent --monitor -e "com.apple.security.*"
-
-# Run as daemon with custom config
-listent --daemon --monitor --config /etc/listent/daemon.toml
-```
-
-### Daemon Management
-```bash
-# Install daemon with default monitoring
-listent install-daemon
-
-# Update daemon to monitor specific entitlements
-listent update-config -e "com.apple.private.*"
-
-# View recent daemon activity
-listent logs --since "1 hour ago"
-
-# Check if daemon is running
-listent daemon-status
-```
-
-## Installation
+## Install
 
 ### From Source
+
 ```bash
 # Clone and build
 git clone https://github.com/mariohewardt/listent
@@ -126,81 +31,161 @@ cargo build --release
 
 ### Quick Start
 ```bash
-# Build
-cargo build --release
-
 # Show help
 ./target/release/listent --help
 
-# Basic scan
-./target/release/listent /Applications
+# Basic scan (default location: /Applications)
+./target/release/listent
+
+# Scan specific directories
+./target/release/listent /usr/bin /Applications
 
 # Show version
 ./target/release/listent --version
 ```
 
-## Configuration
+## Development
 
-### Command Line Options
-- **Paths**: Multiple paths can be specified: `listent /path1 /path2`
-- **Entitlement filtering**: `-e "pattern"` supports exact matches and globs (`*`, `?`, `[]`)
-- **Output format**: `--json` for structured output, default is human-readable
-- **Monitoring**: `--monitor` enables real-time process monitoring
-- **Daemon mode**: `--daemon` runs as background service (requires `--monitor`)
+Please see development instructions in [`DEVELOPMENT.md`](DEVELOPMENT.md).
 
-### Entitlement Patterns
+## Usage
+
+```
+Usage: listent [OPTIONS] [PATH]...
+
+Arguments:
+  [PATH]...
+          Directory or file paths to scan (default: /Applications)
+          
+          Supports multiple paths: listent /path1 /path2 /path3
+
+Options:
+  -e, --entitlement <KEY>
+          Filter by entitlement key (exact match or glob pattern)
+          
+          Supports exact matching (e.g., "com.apple.security.network.client") and glob patterns (e.g.,
+          "com.apple.security.*", "*network*", "*.client").
+          
+          Multiple filters: -e key1 -e key2 OR -e key1,key2 (logical OR)
+
+  -j, --json
+          Output in JSON format
+
+  -q, --quiet
+          Suppress warnings about unreadable files
+
+  -m, --monitor
+          Enable real-time process monitoring mode
+
+      --interval <SECONDS>
+          Polling interval in seconds (0.1 - 300.0) [monitoring mode only]
+          
+          [default: 1.0]
+
+      --daemon
+          Run as background daemon (implies --monitor)
+
+      --launchd
+          Install as LaunchD service (requires --daemon and sudo)
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+  -V, --version
+          Print version
+```
+
+### Examples
+
+#### Static Scanning
+
+```bash
+# Basic scan with progress
+listent /Applications
+
+# Multi-directory scan with entitlement filtering
+listent /usr/bin /Applications -e "*security*"
+
+# Find all network-related entitlements
+listent -e "*network*" --json | jq '.results[].entitlements'
+
+# Scan quietly (suppress progress indicators)
+listent /System/Applications --quiet
+
+# Multiple entitlement patterns
+listent -e "com.apple.security.*" -e "*debug*" /Applications
+```
+
+#### Case Sensitivity Examples
+
+```bash
+# Default behavior is case-sensitive
+listent -e "com.apple.security.Network"  # Matches exact case only
+listent -e "*Network*"                   # Matches any case in pattern
+
+# Use glob patterns for flexible matching
+listent -e "*network*"     # Matches: network, Network, NETWORK, etc.
+listent -e "*[Nn]etwork*"  # Matches: Network, network (bracket notation)
+```
+
+#### Real-time Process Monitoring
+
+```bash
+# Monitor all new processes with default 1-second interval
+listent --monitor
+
+# Monitor with custom polling interval
+listent --monitor --interval 0.5
+
+# Monitor specific entitlements only
+listent --monitor -e "com.apple.security.network.*"
+
+# Monitor with JSON output for automation
+listent --monitor --json -e "*security*"
+```
+
+#### Background Daemon Mode
+
+```bash
+# Start daemon with specific paths and entitlement filters
+listent --daemon /Applications /usr/bin -e "com.apple.security.*"
+
+# Daemon with custom polling interval
+listent --daemon /Applications -e "*network*" --interval 2.0
+
+# Quiet daemon mode (no console output)
+listent --daemon /Applications -e "com.apple.*" --quiet
+
+# JSON output for log aggregation systems
+listent --daemon /Applications -e "*security*" --json
+```
+
+### Advanced Usage
+
+#### Entitlement Pattern Matching
+
+`listent` supports flexible entitlement filtering using glob patterns:
+
 ```bash
 # Exact match
--e "com.apple.security.network.client"
+listent -e "com.apple.security.network.client"
 
-# Wildcard patterns
--e "com.apple.security.*"        # All Apple security entitlements
--e "*network*"                   # Any entitlement containing "network"
--e "*.debug.*"                   # Debug-related entitlements
+# Wildcard patterns  
+listent -e "com.apple.security.*"        # All Apple security entitlements
+listent -e "*network*"                   # Any entitlement containing "network"
+listent -e "*.debug.*"                   # Debug-related entitlements
+
+# Character class patterns
+listent -e "com.apple.[sp]*"             # Matches 'security' or 'private' branches
+listent -e "*[Nn]etwork*"                # Case variations
 
 # Multiple patterns (OR logic)
--e "com.apple.private.*" -e "*.debug.*"
+listent -e "com.apple.private.*" -e "*.debug.*"
 ```
 
-### Daemon Configuration
-Daemon settings can be configured via:
-1. **Configuration file**: `/etc/listent/daemon.toml` or custom path with `--config`
-2. **Runtime updates**: `listent update-config` command
-3. **Command line**: Initial settings when starting daemon
+#### Output Format Options
 
-Example daemon configuration:
-```toml
-[daemon]
-polling_interval = 1.0
-auto_start = true
-
-[monitoring]
-entitlement_filters = ["com.apple.security.*", "*network*"]
-output_json = false
-
-[logging]
-level = "info"
-subsystem = "com.github.mariohewardt.listent"
-```
-
-## Troubleshooting
-
-### Ctrl+C Not Working in External Terminals
-
-If Ctrl+C doesn't interrupt the scan in Terminal.app or iTerm2, this is due to a macOS terminal signal handling issue. 
-
-**Workaround**: Before running `listent`, execute:
-```bash
-trap - INT
-```
-
-This removes any existing interrupt trap and restores the default SIGINT behavior. After this, Ctrl+C should work normally.
-
-Note: This issue doesn't affect VS Code's integrated terminal.
-
-## Output Formats
-
-### Human-Readable (Default)
+**Human-readable output (default):**
 ```
 Found 2 binaries with 5 total entitlements:
 
@@ -217,7 +202,7 @@ Scan Summary:
   Duration: 2.34s
 ```
 
-### JSON Format
+**JSON output for automation:**
 ```json
 {
   "results": [
@@ -238,127 +223,83 @@ Scan Summary:
 }
 ```
 
-## Architecture
+### Daemon Integration
 
-### Components
-- **CLI Module**: Command-line argument parsing and validation
-- **Scan Engine**: Fast directory traversal and binary discovery
-- **Entitlement Extractor**: Uses macOS `codesign` to extract entitlements
-- **Monitor Engine**: Real-time process monitoring with configurable polling
-- **Daemon Controller**: LaunchD integration for background operation
-- **Output Formatter**: Human-readable and JSON output generation
+The daemon mode provides continuous process monitoring with the same CLI interface as scan and monitor modes:
 
-### Performance
-- **Smart filtering**: Checks file permissions before expensive operations
-- **Progress tracking**: Real-time progress with file counts and directory context
-- **Optimized I/O**: Minimal file operations, efficient memory usage
-- **Interrupt handling**: Immediate response to Ctrl+C with graceful cleanup
+**Key Features:**
+- Consistent argument structure across all modes (`listent [--mode] [paths...] [-e entitlements...]`)
+- Background process monitoring with configurable intervals
+- macOS Unified Logging System integration
+- Automatic LaunchD integration for system services
+- No configuration files or IPC complexity
 
-## Requirements
-
-### System Requirements
-- **macOS**: 10.15+ (uses `codesign` utility)
-- **Architecture**: x86_64 or ARM64 (Apple Silicon)
-- **Permissions**: Read access to target directories; admin privileges for daemon installation
-
-### Runtime Dependencies
-- **codesign**: System utility for entitlement extraction (included with macOS)
-- **launchd**: System service manager for daemon mode (included with macOS)
-
-## Security Considerations
-
-### Permissions
-- **Static scanning**: Requires read access to target directories
-- **Process monitoring**: Requires ability to enumerate running processes
-- **Daemon installation**: Requires administrator privileges for LaunchD registration
-
-### Privacy
-- **No data collection**: All processing is local, no network communication
-- **System logging**: Daemon mode logs to macOS Unified Logging System only
-- **Entitlement access**: Only reads publicly accessible entitlement information
-
-## Development
-
-### Building
+**Usage Pattern:**
 ```bash
-# Debug build
-cargo build
+# Same arguments work across modes:
 
-# Release build (optimized)
-cargo build --release
+# Static scan
+listent /Applications -e "com.apple.*"
 
-# Run tests
-cargo test
+# Monitor mode  
+listent --monitor /Applications -e "com.apple.*" --interval 1.5
 
-# Format code
-cargo fmt --all
-
-# Lint code
-cargo clippy --all-targets -- -D warnings
+# Daemon mode (background)
+listent --daemon /Applications -e "com.apple.*" --interval 1.5
 ```
 
-### Project Structure
-```
-src/
-├── main.rs              # Entry point and CLI coordination
-├── cli/                 # Command-line argument parsing
-├── models/              # Data structures and configuration
-├── scan/                # Static file/directory scanning
-├── entitlements/        # Entitlement extraction and filtering
-├── output/              # Output formatting and progress tracking
-├── monitor/             # Real-time process monitoring
-└── daemon/              # LaunchD daemon integration
-```
+### Troubleshooting
 
-### Testing
+#### Ctrl+C Not Working in External Terminals
+
+If Ctrl+C doesn't interrupt scans in Terminal.app or iTerm2, this is due to macOS terminal signal handling:
+
 ```bash
-# Unit tests
-cargo test
+# Workaround - run before using listent:
+trap - INT
 
-# Integration tests
-cargo test --test integration
-
-# Contract tests (CLI behavior)
-cargo test --test contract
-
-# Build and test all features
-cargo test --all-features
+# Then Ctrl+C should work normally
+listent /Applications
 ```
 
-### Contributing
-1. Follow the project's constitutional principles in `CONSTITUTION.md`
-2. Check "Expansion Triggers" before adding complexity
-3. Ensure all tests pass
-4. Update documentation for new features
+*Note: This issue doesn't affect VS Code's integrated terminal.*
 
-## Related Projects
+#### Permission Issues
 
-- **macOS Security Research**: Tools for analyzing application entitlements and permissions
-- **System Monitoring**: Real-time process and security event monitoring tools
-- **DevOps Security**: Automated security compliance and audit tools
+```bash
+# For system directories requiring elevated access:
+sudo listent /System/Library
 
-## Roadmap
+# For daemon mode with system paths:
+sudo listent --daemon /System/Library /usr/bin -e "com.apple.*"
 
-See "Expansion Triggers" in `CONSTITUTION.md` before adding complexity.
+# Check file permissions:
+ls -la /path/to/directory
+```
 
-### Potential Enhancements
-- **Entitlement analysis**: Pattern detection and security recommendations  
-- **Historical tracking**: Process monitoring with persistent storage
-- **Integration APIs**: Webhooks and external system integration
-- **Performance optimization**: Parallel processing and caching
+#### Performance Optimization
 
-## Security
+```bash
+# Scan with quiet mode for faster execution:
+listent /large/directory --quiet
 
-For vulnerability reporting, supported versions, and a condensed risk overview see [`SECURITY.md`](SECURITY.md).
+# Use specific entitlement filters to reduce processing:
+listent -e "com.apple.security.*" /Applications
 
-A detailed, expanded threat model (architecture, STRIDE analysis, mitigations, and roadmap) is available at [`docs/threat-model.md`](docs/threat-model.md).
-
-If you believe you have found a security issue, please follow the disclosure process in `SECURITY.md` rather than opening a public issue.
+# Monitor mode with longer intervals for less CPU usage:
+listent --monitor --interval 5.0
+```
 
 ## License
 
-MIT OR Apache-2.0
+This project is licensed under the MIT OR Apache-2.0 License. See the [LICENSE](LICENSE) file for details.
 
-## Support
-
-For issues, feature requests, or contributions, please use the project's GitHub repository.
+## Additional Links
+- [Code](https://github.com/mariohewardt/listent)
+- [Issues](https://github.com/mariohewardt/listent/issues)
+- [Pull requests](https://github.com/mariohewardt/listent/pulls)
+- [Actions](https://github.com/mariohewardt/listent/actions)
+- [Security](SECURITY.md)
+- [Threat Model](docs/threat-model.md)
+- [Development Guide](DEVELOPMENT.md)
+- [Release Checklist](RELEASE_CHECKLIST.md)

@@ -26,6 +26,11 @@ impl ReliableTestRunner {
     /// Run a command with automatic timeout and cleanup
     pub fn run_command_with_timeout(&mut self, mut cmd: Command) -> Result<TestOutput> {
         let start = Instant::now();
+        
+        // Ensure stdout and stderr are captured
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+        
         let mut child = cmd.spawn()?;
         
         // Register for cleanup
@@ -33,7 +38,7 @@ impl ReliableTestRunner {
         
         // Set up timeout mechanism
         let (tx, rx) = mpsc::channel();
-        let child_id = child.id();
+        let _child_id = child.id();
         let timeout = self.timeout;
         
         // Spawn timeout thread
@@ -44,7 +49,7 @@ impl ReliableTestRunner {
         
         // Wait for either completion or timeout
         let result = match child.try_wait() {
-            Ok(Some(status)) => {
+            Ok(Some(_status)) => {
                 // Process already finished
                 let output = child.wait_with_output()?;
                 TestOutput::from_output(output, start.elapsed())
@@ -61,7 +66,7 @@ impl ReliableTestRunner {
     
     /// Run listent in monitor mode with controlled interruption
     pub fn run_monitor_with_interrupt(&mut self, args: &[&str], interrupt_after: Duration) -> Result<TestOutput> {
-        let start = Instant::now();
+        let _start = Instant::now();
         
         let mut cmd = Command::new("./target/release/listent");
         cmd.arg("--monitor");
@@ -69,7 +74,11 @@ impl ReliableTestRunner {
             cmd.arg(arg);
         }
         
-        let mut child = cmd.spawn()?;
+        // Ensure stdout and stderr are captured
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::piped());
+        
+        let child = cmd.spawn()?;
         self.cleanup_handles.push(CleanupHandle::Process(child.id()));
         
         // Wait for specified duration
@@ -303,16 +312,15 @@ impl TestScenario {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     
     #[test]
     fn test_reliable_runner_timeout() -> Result<()> {
         let mut runner = ReliableTestRunner::new(2); // 2 second timeout
         
         // Run a command that should timeout (sleep longer than timeout)
-        let result = runner.run_command_with_timeout(
-            Command::new("sleep").arg("10")
-        )?;
+        let mut cmd = Command::new("sleep");
+        cmd.arg("10");
+        let result = runner.run_command_with_timeout(cmd)?;
         
         assert!(result.timed_out, "Should have timed out");
         assert!(result.duration >= Duration::from_secs(2), "Should respect timeout");
@@ -324,9 +332,9 @@ mod tests {
     fn test_reliable_runner_success() -> Result<()> {
         let mut runner = ReliableTestRunner::new(5);
         
-        let result = runner.run_command_with_timeout(
-            Command::new("echo").arg("hello")
-        )?;
+        let mut cmd = Command::new("echo");
+        cmd.arg("hello");
+        let result = runner.run_command_with_timeout(cmd)?;
         
         assert!(!result.timed_out, "Should not timeout");
         assert!(result.was_successful(), "Should succeed");

@@ -1,24 +1,11 @@
 use crate::models::{MonitoredProcess, PollingConfiguration, ProcessSnapshot};
 use crate::monitor::{ProcessTracker, init_logger};
 use anyhow::Result;
-use signal_hook;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
 use sysinfo::{System, SystemExt, ProcessExt, PidExt};
-
-/// Start monitoring processes with the given configuration
-pub fn start_monitoring(config: PollingConfiguration) -> Result<()> {
-    let running = Arc::new(AtomicBool::new(true));
-    let r = running.clone();
-
-    // Set up signal handler using signal-hook (same approach as scan mode)
-    signal_hook::flag::register(signal_hook::consts::SIGINT, r.clone())?;
-    signal_hook::flag::register(signal_hook::consts::SIGTERM, r.clone())?;
-
-    start_monitoring_internal(config, running)
-}
 
 /// Start monitoring processes with external interrupt flag (called from main.rs)
 pub fn start_monitoring_with_interrupt(config: PollingConfiguration, interrupted: Arc<AtomicBool>) -> Result<()> {
@@ -114,7 +101,7 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
 
 fn create_process_snapshot(system: &System) -> Result<ProcessSnapshot> {
     let timestamp = SystemTime::now();
-    let scan_start = Instant::now();
+    let _scan_start = Instant::now();
     
     let mut processes = HashMap::new();
 
@@ -136,8 +123,6 @@ fn create_process_snapshot(system: &System) -> Result<ProcessSnapshot> {
 
     Ok(ProcessSnapshot {
         processes,
-        timestamp,
-        scan_duration: scan_start.elapsed(),
     })
 }
 

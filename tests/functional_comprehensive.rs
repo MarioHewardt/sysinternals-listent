@@ -13,11 +13,9 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
     let mut runner = ReliableTestRunner::new(30); // 30 second timeout
     
     // Test basic scan
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("--json")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path()).arg("--json");
+    let result = runner.run_command_with_timeout(cmd)?;
     
     assert!(result.was_successful(), "Basic scan should succeed");
     
@@ -27,13 +25,12 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
     assert!(json.get("summary").is_some(), "Should have summary field");
     
     // Test with entitlement filter
-    let filtered_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("-e")
-            .arg("com.apple.security.network.*")
-            .arg("--json")
-    )?;
+    let mut filtered_cmd = std::process::Command::new("./target/release/listent");
+    filtered_cmd.arg(test_env.path())
+                .arg("-e")
+                .arg("com.apple.security.network.*")
+                .arg("--json");
+    let filtered_result = runner.run_command_with_timeout(filtered_cmd)?;
     
     assert!(filtered_result.was_successful(), "Filtered scan should succeed");
     
@@ -42,7 +39,7 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
 
 #[test]
 fn test_end_to_end_monitor_workflow() -> Result<()> {
-    let test_env = TestEnvironment::new()?;
+    let _test_env = TestEnvironment::new()?;
     let mut scenario = TestScenario::new("monitor_workflow", 60);
     
     // Start a monitor process
@@ -68,7 +65,7 @@ fn test_signal_handling_reliability() -> Result<()> {
     
     // Test CTRL-C in scan mode
     let scan_result = runner.run_monitor_with_interrupt(&[
-        "/Applications", // Use real path that exists
+        "/bin", // Use smallest system directory for reliable quick completion
         "--quiet"
     ], Duration::from_millis(1500))?;
     
@@ -88,7 +85,7 @@ fn test_signal_handling_reliability() -> Result<()> {
 
 #[test]
 fn test_process_detection_with_controlled_processes() -> Result<()> {
-    let test_env = TestEnvironment::new()?;
+    let _test_env = TestEnvironment::new()?;
     let mut scenario = TestScenario::new("process_detection", 30);
     
     // Spawn test processes with known entitlements after monitor starts
@@ -118,22 +115,19 @@ fn test_error_handling_and_edge_cases() -> Result<()> {
     let mut runner = ReliableTestRunner::new(10);
     
     // Test nonexistent path
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("/nonexistent/path/that/should/not/exist")
-            .arg("--quiet")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg("/nonexistent/path/that/should/not/exist").arg("--quiet");
+    let result = runner.run_command_with_timeout(cmd)?;
     
     // Should handle gracefully (exact behavior may vary)
     assert!(result.exit_code.is_some(), "Should exit with status code");
     
     // Test invalid interval
-    let invalid_interval_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("--monitor")
-            .arg("--interval")
-            .arg("-1.0") // Invalid negative interval
-    )?;
+    let mut invalid_cmd = std::process::Command::new("./target/release/listent");
+    invalid_cmd.arg("--monitor")
+               .arg("--interval")
+               .arg("-1.0"); // Invalid negative interval
+    let invalid_interval_result = runner.run_command_with_timeout(invalid_cmd)?;
     
     // Should reject invalid interval
     assert!(invalid_interval_result.exit_code != Some(0) || 
@@ -150,10 +144,9 @@ fn test_output_format_consistency() -> Result<()> {
     let mut runner = ReliableTestRunner::new(15);
     
     // Test human-readable output
-    let human_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-    )?;
+    let mut human_cmd = std::process::Command::new("./target/release/listent");
+    human_cmd.arg(test_env.path());
+    let human_result = runner.run_command_with_timeout(human_cmd)?;
     
     assert!(human_result.was_successful(), "Human output should work");
     assert!(human_result.contains_stdout("Found") || 
@@ -162,11 +155,9 @@ fn test_output_format_consistency() -> Result<()> {
         "Should contain human-readable indicators");
     
     // Test JSON output
-    let json_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("--json")
-    )?;
+    let mut json_cmd = std::process::Command::new("./target/release/listent");
+    json_cmd.arg(test_env.path()).arg("--json");
+    let json_result = runner.run_command_with_timeout(json_cmd)?;
     
     assert!(json_result.was_successful(), "JSON output should work");
     
@@ -183,21 +174,17 @@ fn test_performance_and_timeout_handling() -> Result<()> {
     
     // Test that scan doesn't hang indefinitely
     let start = std::time::Instant::now();
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("/Applications") // Real directory that should complete
-            .arg("--quiet")
-    )?;
+    let mut timeout_cmd = std::process::Command::new("./target/release/listent");
+    timeout_cmd.arg("/bin").arg("--quiet"); // Smallest system directory that should complete very quickly
+    let result = runner.run_command_with_timeout(timeout_cmd)?;
     let duration = start.elapsed();
     
     // Should complete within reasonable time
-    assert!(duration < Duration::from_secs(15), 
-        "Scan should complete within 15 seconds");
-    
+    assert!(duration < Duration::from_secs(8), 
+        "Scan should complete within 8 seconds");
+
     // Should not timeout
-    assert!(!result.timed_out, "Scan should not timeout");
-    
-    Ok(())
+    assert!(!result.timed_out, "Scan should not timeout");    Ok(())
 }
 
 #[test]
@@ -211,18 +198,15 @@ fn test_concurrent_operations() -> Result<()> {
     let mut handles = vec![];
     
     // Run multiple scans concurrently
-    for i in 0..3 {
+    for _i in 0..3 {
         let test_path = test_env.path().to_path_buf();
         let success_counter = success_count.clone();
         
         let handle = thread::spawn(move || -> Result<()> {
             let mut runner = ReliableTestRunner::new(10);
-            let result = runner.run_command_with_timeout(
-                std::process::Command::new("./target/release/listent")
-                    .arg(&test_path)
-                    .arg("--json")
-                    .arg("--quiet")
-            )?;
+            let mut stress_cmd = std::process::Command::new("./target/release/listent");
+            stress_cmd.arg(&test_path).arg("--json").arg("--quiet");
+            let result = runner.run_command_with_timeout(stress_cmd)?;
             
             if result.was_successful() {
                 success_counter.fetch_add(1, Ordering::SeqCst);

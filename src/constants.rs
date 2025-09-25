@@ -14,9 +14,3 @@ pub const LAUNCHD_PLIST_NAME: &str = "com.microsoft.sysinternals.listent.plist";
 
 /// LaunchD service name (same as subsystem)
 pub const LAUNCHD_SERVICE_NAME: &str = APP_SUBSYSTEM;
-
-/// IPC socket path for daemon communication (user-writable location)
-pub const IPC_SOCKET_PATH: &str = "/tmp/listent-daemon.sock";
-
-/// Default daemon log level
-pub const DEFAULT_LOG_LEVEL: &str = "info";

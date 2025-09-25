@@ -102,7 +102,7 @@ fn test_static_scan_interrupt_handling() -> Result<()> {
     let start = std::time::Instant::now();
     
     // Start scan process
-    let mut child = Command::new("./target/release/listent")
+    let child = Command::new("./target/release/listent")
         .arg(test_env.path())
         .arg("--quiet") // Reduce output noise
         .spawn()?;

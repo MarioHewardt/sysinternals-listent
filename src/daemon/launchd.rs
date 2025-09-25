@@ -3,8 +3,6 @@
 //! Handles plist generation, service installation, and lifecycle management
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use crate::constants::{LAUNCHD_SERVICE_NAME, LAUNCHD_PLIST_NAME};
@@ -146,161 +144,12 @@ impl LaunchDPlist {
         Ok(())
     }
 
-    /// Unload service with launchctl
-    pub fn launchctl_unload(&self) -> Result<()> {
-        let output = Command::new("launchctl")
-            .args(&["unload", &format!("/Library/LaunchDaemons/{}", LAUNCHD_PLIST_NAME)])
-            .output()
-            .context("Failed to execute launchctl unload")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Don't fail if service was already unloaded
-            if !stderr.contains("Could not find specified service") {
-                anyhow::bail!("launchctl unload failed: {}", stderr);
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Check if service is currently loaded
-    pub fn is_service_loaded(&self) -> Result<bool> {
-        let output = Command::new("launchctl")
-            .args(&["list", &self.label])
-            .output()
-            .context("Failed to execute launchctl list")?;
-
-        Ok(output.status.success())
-    }
-
-    /// Install daemon service to LaunchD
-    pub fn install_service(&self, daemon_path: &Path, config_path: Option<&Path>) -> Result<()> {
-        // Create necessary directories
-        if let Some(ref working_dir) = self.working_directory {
-            std::fs::create_dir_all(working_dir)
-                .with_context(|| format!("Failed to create working directory: {}", working_dir.display()))?;
-        }
-        
-        if let Some(ref log_path) = self.standard_out_path {
-            if let Some(log_dir) = log_path.parent() {
-                std::fs::create_dir_all(log_dir)
-                    .with_context(|| format!("Failed to create log directory: {}", log_dir.display()))?;
-            }
-        }
-
-        // Generate plist content
-        let mut plist = self.clone();
-        
-        // Update program arguments with config path if provided
-        if let Some(config) = config_path {
-            plist.program_arguments = vec![
-                daemon_path.to_string_lossy().to_string(),
-                "--monitor".to_string(),
-                "--daemon".to_string(),
-                "--config".to_string(),
-                config.to_string_lossy().to_string(),
-            ];
-        }
-
-        let plist_content = plist.generate_plist()?;
-        
-        // Install plist file
+    /// Install daemon service to LaunchD (minimal version)
+    pub fn install_service(&self, _daemon_path: &std::path::Path, _config_path: Option<&std::path::Path>) -> Result<()> {
+        let plist_content = self.generate_plist()?;
         let plist_path = self.install_plist(&plist_content)?;
-        
-        // Load service with launchctl
         self.launchctl_load(&plist_path)?;
-        
-        println!("✅ Daemon service installed successfully");
-        println!("   Service: {}", self.label);
-        println!("   Plist: {}", plist_path.display());
-        
         Ok(())
     }
-
-    /// Uninstall daemon service from LaunchD
-    pub fn uninstall_service(&self) -> Result<()> {
-        // Unload service first
-        self.launchctl_unload()?;
-        
-        // Remove plist file from LaunchDaemons
-        let plist_path = Path::new("/Library/LaunchDaemons")
-            .join(LAUNCHD_PLIST_NAME);
-
-        if plist_path.exists() {
-            std::fs::remove_file(&plist_path)
-                .with_context(|| format!("Failed to remove plist file: {}", plist_path.display()))?;
-        }
-
-        println!("✅ Daemon service uninstalled successfully");
-        println!("   Service: {}", self.label);
-        
-        Ok(())
-    }
-
-    /// Get service status information
-    pub fn get_service_status(&self) -> Result<Option<ServiceStatus>> {
-        let output = Command::new("launchctl")
-            .args(&["list", &self.label])
-            .output()
-            .context("Failed to execute launchctl list")?;
-
-        if !output.status.success() {
-            return Ok(None);
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        
-        // Parse launchctl plist-style output
-        // Look for PID and LastExitStatus fields
-        let mut pid: Option<i32> = None;
-        let mut status_code: i32 = -1;
-        
-        for line in stdout.lines() {
-            let line = line.trim();
-            if line.contains("\"PID\"") {
-                // Parse: "PID" = 12345;
-                if let Some(start) = line.find('=') {
-                    let value_part = &line[start + 1..].trim();
-                    if let Some(end) = value_part.find(';') {
-                        let value_str = &value_part[..end].trim();
-                        pid = value_str.parse::<i32>().ok();
-                    }
-                }
-            } else if line.contains("\"LastExitStatus\"") {
-                // Parse: "LastExitStatus" = 0;
-                if let Some(start) = line.find('=') {
-                    let value_part = &line[start + 1..].trim();
-                    if let Some(end) = value_part.find(';') {
-                        let value_str = &value_part[..end].trim();
-                        status_code = value_str.parse::<i32>().unwrap_or(-1);
-                    }
-                }
-            }
-        }
-        
-        Ok(Some(ServiceStatus {
-            pid,
-            status_code,
-            label: self.label.clone(),
-        }))
-    }
 }
 
-/// Service status information from launchctl
-#[derive(Debug, Clone)]
-pub struct ServiceStatus {
-    /// Process ID (None if not running)
-    pub pid: Option<i32>,
-    /// Status code from launchctl
-    pub status_code: i32,
-    /// Service label
-    pub label: String,
-}
-
-impl ServiceStatus {
-    /// Check if service is currently running
-    pub fn is_running(&self) -> bool {
-        self.pid.is_some() && self.status_code == 0
-    }
-}

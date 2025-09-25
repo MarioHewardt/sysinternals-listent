@@ -227,7 +227,7 @@ impl TestRunner {
             cmd.arg(arg);
         }
         
-        let mut child = cmd
+        let child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
@@ -242,7 +242,7 @@ impl TestRunner {
         
         // Wait for process to exit (with timeout)
         let timeout = Duration::from_secs(5); // Give it 5 seconds to exit gracefully
-        let result = wait_for_child_with_timeout(&mut child, timeout)?;
+        let result = wait_for_child_with_timeout(child, timeout)?;
         
         Ok(TestResult {
             exit_code: result.status.code(),
@@ -276,12 +276,12 @@ impl TestResult {
 }
 
 /// Wait for a child process with timeout
-fn wait_for_child_with_timeout(child: &mut std::process::Child, timeout: std::time::Duration) -> anyhow::Result<std::process::Output> {
+fn wait_for_child_with_timeout(child: std::process::Child, timeout: std::time::Duration) -> anyhow::Result<std::process::Output> {
     use std::sync::mpsc;
     use std::thread;
     
-    let (tx, rx) = mpsc::channel();
-    let child_id = child.id();
+    let (tx, _rx) = mpsc::channel();
+    let _child_id = child.id();
     
     // Spawn a thread to wait for the child
     thread::spawn(move || {
@@ -291,12 +291,11 @@ fn wait_for_child_with_timeout(child: &mut std::process::Child, timeout: std::ti
     });
     
     // Try to get output
-    match child.wait_with_output() {
+    let output_result = child.wait_with_output();
+    match output_result {
         Ok(output) => Ok(output),
         Err(e) => {
-            // Kill the child if it's still running
-            let _ = child.kill();
-            Err(anyhow::anyhow!("Child process timed out: {}", e))
+            Err(anyhow::anyhow!("Child process failed: {}", e))
         }
     }
 }

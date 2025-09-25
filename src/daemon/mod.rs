@@ -7,21 +7,16 @@
 //! - Enhanced Unified Logging System integration
 
 pub mod config;
-pub mod ipc;
 pub mod launchd;
 pub mod logging;
 
 use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tokio::signal;
 use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
-use crate::daemon::config::DaemonConfiguration;
-use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY, IPC_SOCKET_PATH};
-use crate::daemon::ipc::IpcServer;
-use crate::daemon::logging::{DaemonLogger, LogLevel};
+use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY};
+use crate::daemon::logging::DaemonLogger;
 use crate::monitor::process_tracker::ProcessTracker;
 
 /// Check if a listent daemon process is already running
@@ -58,8 +53,7 @@ fn is_daemon_running() -> bool {
                         let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
                         // Only match actual listent processes, not sudo commands
                         if cmd_line.contains("listent") && 
-                           cmd_line.contains("--daemon") && 
-                           cmd_line.contains("--monitor") &&
+                           cmd_line.contains("--daemon") &&
                            !cmd_line.contains("sudo") {
                             return true;
                         }
@@ -74,89 +68,29 @@ fn is_daemon_running() -> bool {
     }
 }
 
-/// Daemon runtime state
-pub struct DaemonState {
-    /// Current configuration
-    config: Arc<Mutex<DaemonConfiguration>>,
-    /// Process tracker for monitoring
-    process_tracker: Arc<Mutex<ProcessTracker>>,
-    /// Daemon logger
-    logger: DaemonLogger,
-    /// IPC server for runtime communication
-    ipc_server: Option<IpcServer>,
-}
-
-impl DaemonState {
-    /// Create new daemon state with configuration
-    pub fn new(config: DaemonConfiguration) -> Result<Self> {
-        let logger = DaemonLogger::new(
-            APP_SUBSYSTEM.to_string(),
-            DAEMON_CATEGORY.to_string(),
-            LogLevel::Info,
-        )?;
-
-        let process_tracker = ProcessTracker::new();
-
-        Ok(Self {
-            config: Arc::new(Mutex::new(config)),
-            process_tracker: Arc::new(Mutex::new(process_tracker)),
-            logger,
-            ipc_server: None,
-        })
-    }
-
-    /// Initialize IPC server
-    pub fn with_ipc_server(mut self, socket_path: PathBuf) -> Result<Self> {
-        self.ipc_server = Some(IpcServer::new(socket_path)?);
-        Ok(self)
-    }
-
-    /// Get current configuration
-    pub async fn get_config(&self) -> DaemonConfiguration {
-        self.config.lock().await.clone()
-    }
-
-    /// Update configuration
-    pub async fn update_config(&self, new_config: DaemonConfiguration) -> Result<()> {
-        let mut config = self.config.lock().await;
-        self.logger.log_config_change(
-            "Configuration updated",
-            &format!("{:?}", *config),
-            &format!("{:?}", new_config),
-        )?;
-        *config = new_config;
-        Ok(())
-    }
-}
-
-/// Run the daemon in background mode
-/// This function replaces terminal output with ULS logging
-pub async fn run_daemon_mode() -> Result<()> {
-    run_daemon_with_config(None).await
-}
-
-/// Run daemon with specific configuration path
-pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> {
+/// Run daemon with CLI arguments (simplified approach)
+/// This function directly accepts daemon configuration via CLI arguments
+pub async fn run_daemon_with_args(
+    interval: f64,
+    paths: Vec<PathBuf>,
+    entitlements: Vec<String>,
+) -> Result<()> {
     // Check if we're already running as the daemon child process
     if std::env::var("LISTENT_DAEMON_CHILD").is_ok() {
         // We're the child process - run the daemon directly
-        run_daemon_process(config_path).await
+        run_daemon_process_with_args(interval, paths, entitlements).await
     } else {
         // We're the parent - spawn child and exit
-        spawn_daemon_child(config_path).await
+        spawn_daemon_child_with_args(interval, paths, entitlements).await
     }
 }
 
-/// Spawn daemon child process and exit parent
-/// Spawn daemon as detached child process
-async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
-    // Load configuration
-    let config = if let Some(ref path) = config_path {
-        DaemonConfiguration::load_from_file(path)?
-    } else {
-        DaemonConfiguration::default()
-    };
-    
+/// Spawn daemon child process with CLI arguments
+async fn spawn_daemon_child_with_args(
+    interval: f64,
+    paths: Vec<PathBuf>,
+    entitlements: Vec<String>,
+) -> Result<()> {
     // Check if daemon is already running BEFORE spawning
     if is_daemon_running() {
         anyhow::bail!(
@@ -169,10 +103,17 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     
     let mut cmd = std::process::Command::new(current_exe);
     cmd.env("LISTENT_DAEMON_CHILD", "1");
-    cmd.arg("--daemon").arg("--monitor");
+    cmd.arg("--daemon");
+    cmd.arg("--interval").arg(interval.to_string());
     
-    if let Some(config) = config_path {
-        cmd.arg("--config").arg(config);
+    // Add paths as individual arguments (same as scan/monitor modes)
+    for path in &paths {
+        cmd.arg(path);
+    }
+    
+    // Add entitlements as individual -e arguments (same as scan/monitor modes)
+    for entitlement in &entitlements {
+        cmd.arg("-e").arg(entitlement);
     }
     
     // Spawn the child process detached
@@ -186,11 +127,8 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     
     if is_daemon_running() {
         println!("✅ listent daemon started successfully");
-        println!("  Polling interval: {}s", config.daemon.polling_interval);
-        println!("  IPC socket: {}", IPC_SOCKET_PATH);
         println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
-        println!("  Check status: listent daemon-status");
-        println!("  Stop daemon: listent daemon-stop");
+        println!("  Stop daemon: pkill -f 'listent.*--daemon'");
         Ok(())
     } else {
         eprintln!("❌ Failed to start listent daemon");
@@ -200,110 +138,69 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     }
 }
 
-/// Run the actual daemon process (called by child after fork)
-async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
-    // Load configuration
-    let config = if let Some(ref path) = config_path {
-        DaemonConfiguration::load_from_file(path)?
-    } else {
-        DaemonConfiguration::default()
-    };
-
-    // Create daemon state
-    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
-    let mut daemon_state = DaemonState::new(config.clone())?
-        .with_ipc_server(socket_path.clone())?;
-
-    // Log startup
-    daemon_state.logger.log_startup(
-        config_path.as_deref().unwrap_or(&DaemonConfiguration::default_config_path()?),
-        std::process::id(),
+/// Run the actual daemon process with CLI arguments
+async fn run_daemon_process_with_args(
+    interval: f64,
+    paths: Vec<PathBuf>,
+    entitlements: Vec<String>,
+) -> Result<()> {
+    // Create simplified logger (no complex config needed)
+    let logger = DaemonLogger::new(
+        APP_SUBSYSTEM.to_string(),
+        DAEMON_CATEGORY.to_string(),
     )?;
+
+    // Log startup with CLI arguments
+    logger.log_startup_with_args(interval, &paths, &entitlements, std::process::id())?;
 
     // Setup signal handling for graceful shutdown
     let shutdown_signal = setup_signal_handlers();
 
-    // Start IPC server in background
-    let ipc_task = if let Some(ref mut _ipc_server) = daemon_state.ipc_server {
-        let mut server_clone = IpcServer::new(socket_path)?;
-        // Try to start the IPC server - if it fails, we should fail fast
-        server_clone.start().await.context("Failed to start IPC server")?;
-        
-        Some(tokio::spawn(async move {
-            // Server is already started, just keep it running
-            loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        }))
-    } else {
-        None
-    };
-
-    // Main monitoring loop
+    // Main monitoring loop with CLI arguments
     let monitoring_task = {
-        let process_tracker = daemon_state.process_tracker.clone();
-        let config = daemon_state.config.clone();
-        let logger = daemon_state.logger.clone(); // Reuse the existing logger
+        let logger_clone = logger.clone();
         
         tokio::spawn(async move {
-            if let Err(e) = run_monitoring_loop(process_tracker, config, logger).await {
+            if let Err(e) = run_simplified_monitoring_loop(interval, paths, entitlements, logger_clone).await {
                 eprintln!("❌ Monitoring loop error: {}", e);
             }
         })
     };
 
-    // Log successful startup after all tasks are initialized
-    // TODO: Add proper success logging method to DaemonLogger
-
     // Wait for shutdown signal
     tokio::select! {
         _ = shutdown_signal => {
-            daemon_state.logger.log_shutdown("Received shutdown signal")?;
+            logger.log_shutdown("Received shutdown signal")?;
         }
         _ = monitoring_task => {
-            daemon_state.logger.log_shutdown("Monitoring loop ended")?;
+            logger.log_shutdown("Monitoring loop ended")?;
         }
-        _ = async {
-            if let Some(task) = ipc_task {
-                task.await.ok();
-            }
-        } => {
-            daemon_state.logger.log_shutdown("IPC server ended")?;
-        }
-    }
-
-    // Cleanup
-    if let Some(ref mut ipc_server) = daemon_state.ipc_server {
-        ipc_server.stop()?;
     }
 
     Ok(())
 }
 
-/// Main monitoring loop that runs continuously
-async fn run_monitoring_loop(
-    process_tracker: Arc<Mutex<ProcessTracker>>,
-    config: Arc<Mutex<DaemonConfiguration>>,
+/// Simplified monitoring loop that uses direct CLI arguments
+async fn run_simplified_monitoring_loop(
+    interval: f64,
+    paths: Vec<PathBuf>,
+    entitlements: Vec<String>,
     logger: DaemonLogger,
 ) -> Result<()> {
-    let mut interval = {
-        let config = config.lock().await;
-        tokio::time::interval(config.polling_duration())
-    };
+    let mut interval_timer = tokio::time::interval(Duration::from_secs_f64(interval));
+    let mut process_tracker = ProcessTracker::new();
 
     loop {
-        interval.tick().await;
+        interval_timer.tick().await;
 
-        // Get current processes using polling logic
-        let current_config = config.lock().await;
+        // Create polling configuration from CLI arguments
         let polling_config = PollingConfiguration {
-            interval: current_config.polling_duration(),
-            path_filters: current_config.monitoring.path_filters.clone(),
-            entitlement_filters: current_config.monitoring.entitlement_filters.clone(),
+            interval: Duration::from_secs_f64(interval),
+            path_filters: paths.clone(),
+            entitlement_filters: entitlements.clone(),
             output_json: false, // ULS logging instead
             quiet_mode: false,  // Log all detections
         };
-        drop(current_config);
 
         // Create current snapshot using polling logic
         let current_processes = match scan_current_processes(&polling_config).await {
@@ -316,13 +213,10 @@ async fn run_monitoring_loop(
         
         let current_snapshot = ProcessSnapshot {
             processes: current_processes,
-            timestamp: std::time::SystemTime::now(),
-            scan_duration: std::time::Duration::from_millis(0),
         };
 
         // Detect new processes
-        let mut tracker = process_tracker.lock().await;
-        let new_processes = tracker.detect_new_processes(current_snapshot);
+        let new_processes = process_tracker.detect_new_processes(current_snapshot);
         
         // Log any new processes with entitlements (silent operation)
         for process in new_processes {
@@ -330,7 +224,7 @@ async fn run_monitoring_loop(
                 if let Err(e) = logger.log_process_detection(
                     process.pid,
                     &process.name,
-                    &process.executable_path.to_string_lossy(),
+                    &process.executable_path,
                     &process.entitlements,
                 ) {
                     eprintln!("❌ Failed to log process {}: {}", process.name, e);
@@ -343,49 +237,6 @@ async fn run_monitoring_loop(
 /// Setup signal handlers for graceful shutdown
 async fn setup_signal_handlers() {
     let _ = signal::ctrl_c().await;
-}
-
-/// Initialize daemon with configuration
-pub fn initialize_daemon(config_path: Option<PathBuf>) -> Result<()> {
-    // Validate configuration exists and is readable
-    if let Some(ref path) = config_path {
-        if !path.exists() {
-            return Err(anyhow::anyhow!("Configuration file not found: {}", path.display()));
-        }
-        
-        // Try to load and validate configuration
-        let _config = DaemonConfiguration::load_from_file(path)
-            .with_context(|| format!("Failed to load configuration from {}", path.display()))?;
-    }
-
-    // Ensure required directories exist
-    let config = if let Some(ref path) = config_path {
-        DaemonConfiguration::load_from_file(path)?
-    } else {
-        DaemonConfiguration::default()
-    };
-
-    config.ensure_directories()
-        .context("Failed to create required directories")?;
-
-    Ok(())
-}
-
-/// Stop daemon gracefully
-pub fn stop_daemon() -> Result<()> {
-    // Use hardcoded socket path
-    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
-    
-    // Remove socket file if it exists
-    if socket_path.exists() {
-        std::fs::remove_file(&socket_path)
-            .with_context(|| format!("Failed to remove daemon socket: {}", socket_path.display()))?;
-    }
-
-    // TODO: Send shutdown signal to running daemon via IPC
-    // For now, this is a basic cleanup function
-    
-    Ok(())
 }
 
 /// Scan current processes and their entitlements
@@ -439,4 +290,83 @@ async fn scan_current_processes(config: &PollingConfiguration) -> Result<std::co
     }
     
     Ok(processes)
+}
+
+/// Install listent as a LaunchD service with CLI arguments
+pub async fn install_launchd_service(
+    interval: f64,
+    paths: Vec<PathBuf>,
+    entitlements: Vec<String>,
+) -> Result<()> {
+    use crate::daemon::launchd::LaunchDPlist;
+    
+    // Check if we can write to the LaunchDaemons directory (safer than checking uid)
+    let launch_daemons_dir = std::path::Path::new("/Library/LaunchDaemons");
+    if !launch_daemons_dir.exists() || std::fs::metadata(launch_daemons_dir).is_err() {
+        bail!("Cannot access /Library/LaunchDaemons directory. LaunchD service installation requires root privileges. Run with sudo.");
+    }
+    
+    // Try to create a test file to check write permissions
+    let test_file = launch_daemons_dir.join(".listent-test");
+    match std::fs::File::create(&test_file) {
+        Ok(_) => {
+            // Clean up test file
+            let _ = std::fs::remove_file(&test_file);
+        }
+        Err(_) => {
+            bail!("Cannot write to /Library/LaunchDaemons directory. LaunchD service installation requires root privileges. Run with sudo.");
+        }
+    }
+    
+    // Get current executable path
+    let current_exe = std::env::current_exe()
+        .context("Failed to get current executable path")?;
+    
+    // Create LaunchD plist with daemon arguments
+    let mut plist = LaunchDPlist::new(&current_exe);
+    
+    // Set program arguments to include our CLI parameters
+    let mut program_args = vec![current_exe.to_string_lossy().to_string()];
+    program_args.push("--daemon".to_string());
+    program_args.push("--interval".to_string());
+    program_args.push(interval.to_string());
+    
+    // Add paths
+    for path in &paths {
+        program_args.push(path.to_string_lossy().to_string());
+    }
+    
+    // Add entitlements
+    for entitlement in &entitlements {
+        program_args.push("-e".to_string());
+        program_args.push(entitlement.clone());
+    }
+    
+    // Set the arguments in the plist
+    plist.program_arguments = program_args;
+    
+    // Generate plist content
+    let _plist_content = plist.generate_plist()
+        .context("Failed to generate plist content")?;
+    
+    // Install the plist and load the service
+    match plist.install_service(&current_exe, None) {
+        Ok(_) => {
+            println!("✅ LaunchD service installed successfully");
+            println!("  Service name: {}", crate::constants::LAUNCHD_SERVICE_NAME);
+            println!("  Polling interval: {}s", interval);
+            println!("  Monitoring paths: {}", paths.iter().map(|p| p.display().to_string()).collect::<Vec<_>>().join(", "));
+            println!("  Entitlement filters: {}", entitlements.join(", "));
+            println!("  Plist location: /Library/LaunchDaemons/{}", crate::constants::LAUNCHD_PLIST_NAME);
+            println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
+            println!("  Check status: sudo launchctl list | grep listent");
+            println!("  Uninstall: sudo launchctl unload /Library/LaunchDaemons/{} && sudo rm /Library/LaunchDaemons/{}", 
+                crate::constants::LAUNCHD_PLIST_NAME, crate::constants::LAUNCHD_PLIST_NAME);
+            Ok(())
+        }
+        Err(e) => {
+            eprintln!("❌ Failed to install LaunchD service: {}", e);
+            bail!("LaunchD service installation failed")
+        }
+    }
 }

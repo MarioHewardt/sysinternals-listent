@@ -10,7 +10,7 @@ fn test_exact_entitlement_filter_backwards_compatibility() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test exact matching continues to work
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.security.network.client", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.security.network.client", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("com.apple.security.network.client"));
@@ -21,7 +21,7 @@ fn test_exact_filter_no_substring_matching() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Substring matching should NOT work (this was the old monitor mode bug)
-    cmd.args(&["-p", "/usr/bin", "-e", "security.network", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "security.network", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("No binaries found"));
@@ -32,7 +32,7 @@ fn test_glob_pattern_wildcard() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test glob pattern matching
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.security.*", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.security.*", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("com.apple.security."));
@@ -43,7 +43,7 @@ fn test_glob_pattern_any_network() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test wildcard matching for network entitlements
-    cmd.args(&["-p", "/usr/bin", "-e", "*network*", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "*network*", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("network"));
@@ -54,7 +54,7 @@ fn test_multiple_glob_patterns() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test multiple patterns (OR logic)
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.security.network.*", "-e", "*camera*", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*", "-e", "*camera*", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("network"));
@@ -65,7 +65,7 @@ fn test_invalid_glob_pattern_validation() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test invalid glob pattern is rejected
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.[", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.[", "--quiet"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid entitlement filter"));
@@ -79,7 +79,7 @@ fn test_monitor_mode_glob_patterns() {
     cmd.args(&["--monitor", "-e", "com.apple.security.*", "--interval", "10.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
-        .success() // Should start successfully
+        .interrupted() // Should be interrupted by timeout
         .stdout(predicate::str::contains("Monitoring for processes with entitlement: com.apple.security.*"));
 }
 
@@ -91,7 +91,7 @@ fn test_monitor_mode_consistent_exact_matching() {
     cmd.args(&["--monitor", "-e", "network.client", "--interval", "10.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
-        .success()
+        .interrupted() // Should be interrupted by timeout
         .stdout(predicate::str::contains("Monitoring for processes with entitlement: network.client"));
 }
 
@@ -100,7 +100,7 @@ fn test_json_output_with_patterns() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test JSON output works with glob patterns
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.security.network.*", "--json", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*", "--json", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("\"entitlements\""))
@@ -112,7 +112,7 @@ fn test_comma_separated_patterns() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test comma-separated patterns work with glob
-    cmd.args(&["-p", "/usr/bin", "-e", "com.apple.security.network.*,*camera*", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*,*camera*", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("network").or(predicate::str::contains("No binaries found")));
@@ -123,7 +123,7 @@ fn test_pattern_case_sensitivity() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test that patterns are case-sensitive
-    cmd.args(&["-p", "/usr/bin", "-e", "COM.APPLE.SECURITY.*", "--quiet"])
+    cmd.args(&["/usr/bin", "-e", "COM.APPLE.SECURITY.*", "--quiet"])
         .assert()
         .success()
         .stdout(predicate::str::contains("No binaries found"));

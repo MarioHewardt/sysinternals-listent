@@ -9,9 +9,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-/// Characters for the spinning animation
-const SPINNER_CHARS: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
 /// Progress indicator for directory scanning
 pub struct ScanProgress {
     current_directory: Option<String>,
@@ -35,11 +32,6 @@ impl ScanProgress {
             scanned_files: 0,
             skipped_files: 0,
         }
-    }
-
-    /// Set the total number of files to be scanned
-    pub fn set_total_files(&mut self, total: usize) {
-        self.total_files = total;
     }
 
     /// Start scanning with total file count
@@ -170,14 +162,6 @@ impl ScanProgress {
         if !self.quiet_mode {
             // Ensure we end with a clean line
             eprint!("\r");
-            io::stderr().flush().unwrap_or(());
-        }
-    }
-
-    /// Show a status message without animation (for errors, etc.)
-    pub fn show_message(&self, message: &str) {
-        if !self.quiet_mode {
-            eprintln!("{}", message);
             io::stderr().flush().unwrap_or(());
         }
     }
