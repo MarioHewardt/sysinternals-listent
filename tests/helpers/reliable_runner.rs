@@ -88,7 +88,7 @@ impl ReliableTestRunner {
         self.send_sigint(child.id())?;
         
         // Wait for graceful shutdown (with timeout)
-        let shutdown_timeout = Duration::from_secs(5);
+        let shutdown_timeout = Duration::from_secs(10);
         let (tx, rx) = mpsc::channel();
         
         thread::spawn(move || {

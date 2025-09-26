@@ -14,10 +14,10 @@ use anyhow::{Context, Result, bail};
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::signal;
-use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
+use crate::models::PollingConfiguration;
 use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY, format_permission_error};
 use crate::daemon::logging::DaemonLogger;
-use crate::monitor::process_tracker::ProcessTracker;
+use crate::monitor::{ProcessMonitoringCore, MonitoringConfig};
 
 /// Check if a listent daemon process is already running
 fn is_daemon_running() -> bool {
@@ -180,7 +180,7 @@ async fn run_daemon_process_with_args(
     Ok(())
 }
 
-/// Simplified monitoring loop that uses direct CLI arguments
+/// Simplified monitoring loop that uses direct CLI arguments with shared core
 async fn run_simplified_monitoring_loop(
     interval: f64,
     paths: Vec<PathBuf>,
@@ -188,7 +188,7 @@ async fn run_simplified_monitoring_loop(
     logger: DaemonLogger,
 ) -> Result<()> {
     let mut interval_timer = tokio::time::interval(Duration::from_secs_f64(interval));
-    let mut process_tracker = ProcessTracker::new();
+    let mut monitoring_core = ProcessMonitoringCore::new();
 
     loop {
         interval_timer.tick().await;
@@ -202,21 +202,16 @@ async fn run_simplified_monitoring_loop(
             quiet_mode: false,  // Log all detections
         };
 
-        // Create current snapshot using polling logic
-        let current_processes = match scan_current_processes(&polling_config).await {
+        let monitoring_config = MonitoringConfig::from(&polling_config);
+
+        // Use shared monitoring core to detect new processes
+        let new_processes = match monitoring_core.scan_and_detect_new(&monitoring_config) {
             Ok(processes) => processes,
             Err(e) => {
                 logger.log_error(&format!("Failed to scan processes: {}", e), None)?;
                 continue;
             }
         };
-        
-        let current_snapshot = ProcessSnapshot {
-            processes: current_processes,
-        };
-
-        // Detect new processes
-        let new_processes = process_tracker.detect_new_processes(current_snapshot);
         
         // Log any new processes with entitlements (silent operation)
         for process in new_processes {
@@ -237,59 +232,6 @@ async fn run_simplified_monitoring_loop(
 /// Setup signal handlers for graceful shutdown
 async fn setup_signal_handlers() {
     let _ = signal::ctrl_c().await;
-}
-
-/// Scan current processes and their entitlements
-async fn scan_current_processes(config: &PollingConfiguration) -> Result<std::collections::HashMap<u32, MonitoredProcess>> {
-    use sysinfo::{ProcessExt, System, SystemExt, PidExt};
-    
-    let mut system = System::new_all();
-    system.refresh_processes();
-    
-    let mut processes = std::collections::HashMap::new();
-    
-    // Scan all processes
-    for (pid, process) in system.processes() {
-        let pid_u32 = pid.as_u32();
-        let process_name = process.name().to_string();
-        
-        // Get executable path
-        let executable_path = process.exe().to_path_buf();
-        
-        // Apply path filters if specified
-        if !config.path_filters.is_empty() {
-            let matches_filter = config.path_filters.iter().any(|filter| {
-                executable_path.starts_with(filter)
-            });
-            if !matches_filter {
-                continue;
-            }
-        }
-        
-        // Extract entitlements - convert HashMap to Vec of keys
-        let entitlements = match crate::entitlements::extract_entitlements(&executable_path) {
-            Ok(entitlements_map) => entitlements_map.keys().cloned().collect::<Vec<String>>(),
-            Err(_) => Vec::new(), // Continue with empty entitlements if extraction fails
-        };
-        
-        // Apply entitlement filters if specified using consistent pattern matching
-        if !crate::entitlements::pattern_matcher::entitlements_match_filters(&entitlements, &config.entitlement_filters) {
-            continue;
-        }
-        
-        // Create monitored process
-        let monitored_process = MonitoredProcess {
-            pid: pid_u32,
-            name: process_name,
-            executable_path,
-            entitlements,
-            discovery_timestamp: std::time::SystemTime::now(),
-        };
-        
-        processes.insert(pid_u32, monitored_process);
-    }
-    
-    Ok(processes)
 }
 
 /// Install listent as a LaunchD service with CLI arguments

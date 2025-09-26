@@ -1,11 +1,8 @@
-use crate::models::{MonitoredProcess, PollingConfiguration, ProcessSnapshot};
-use crate::monitor::{ProcessTracker, init_logger};
+use crate::models::{MonitoredProcess, PollingConfiguration};
+use crate::monitor::{ProcessTracker, init_logger, ProcessMonitoringCore, MonitoringConfig};
 use anyhow::Result;
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::time::{Instant, SystemTime};
-use sysinfo::{System, SystemExt, ProcessExt, PidExt};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::time::{Instant, Duration};
 
 /// Start monitoring processes with external interrupt flag (called from main.rs)
 pub fn start_monitoring_with_interrupt(config: PollingConfiguration, interrupted: Arc<AtomicBool>) -> Result<()> {
@@ -30,12 +27,11 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
     // Initialize unified logging
     let _logger = init_logger().ok(); // Graceful degradation if logging fails
 
-    // Initialize process tracker and system info
-    let mut tracker = ProcessTracker::new();
-    let mut system = System::new_all();
+    // Initialize shared process monitoring core
+    let mut monitoring_core = ProcessMonitoringCore::new();
+    let monitoring_config = MonitoringConfig::from(&config);
     
     // Pre-allocate collections to reduce allocations in the loop
-    let mut new_processes = Vec::new();
     let mut filtered_processes = Vec::new();
 
     if !config.quiet_mode {
@@ -58,27 +54,20 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
     while running.load(Ordering::SeqCst) {
         let cycle_start = Instant::now();
 
-        // Refresh system information (only processes, not all system info)
-        system.refresh_processes();
+        // Use shared monitoring core to scan and detect new processes
+        let new_processes = match monitoring_core.scan_and_detect_new(&monitoring_config) {
+            Ok(processes) => processes,
+            Err(e) => {
+                if !config.quiet_mode {
+                    eprintln!("Warning: Failed to scan processes: {}", e);
+                }
+                Vec::new()
+            }
+        };
 
-        // Create snapshot of current processes
-        let snapshot = create_process_snapshot(&system)?;
-
-        // Detect new processes (reuse vector to avoid allocations)
-        new_processes.clear();
-        let mut new_procs = tracker.detect_new_processes(snapshot);
-        
-        // Extract entitlements only for new processes (performance optimization)
-        for process in &mut new_procs {
-            process.entitlements = extract_process_entitlements(&process.executable_path)
-                .unwrap_or_else(|_| Vec::new());
-        }
-        
-        new_processes.extend(new_procs);
-
-        // Apply filters (reuse vector to avoid allocations) 
+        // Apply additional filters (reuse vector to avoid allocations) 
         filtered_processes.clear();
-        filtered_processes.extend(apply_filters(new_processes.drain(..).collect(), &config)?);
+        filtered_processes.extend(apply_filters(new_processes, &config)?);
 
         // Output detected processes
         for process in &filtered_processes {
@@ -88,7 +77,15 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
         // Calculate sleep time to maintain interval
         let cycle_duration = cycle_start.elapsed();
         if let Some(sleep_duration) = config.interval.checked_sub(cycle_duration) {
-            std::thread::sleep(sleep_duration);
+            // Break sleep into small chunks to ensure responsive signal handling
+            let sleep_chunk = Duration::from_millis(100);
+            let mut remaining = sleep_duration;
+            
+            while remaining > Duration::ZERO && running.load(Ordering::SeqCst) {
+                let sleep_time = std::cmp::min(remaining, sleep_chunk);
+                std::thread::sleep(sleep_time);
+                remaining = remaining.saturating_sub(sleep_time);
+            }
         }
     }
 
@@ -97,41 +94,6 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
     }
 
     Ok(())
-}
-
-fn create_process_snapshot(system: &System) -> Result<ProcessSnapshot> {
-    let timestamp = SystemTime::now();
-    let _scan_start = Instant::now();
-    
-    let mut processes = HashMap::new();
-
-    for (pid, process) in system.processes() {
-        // Extract basic process information only (entitlements extracted later for new processes)
-        let name = process.name().to_string();
-        let executable_path = process.exe().to_path_buf();
-
-        let monitored_process = MonitoredProcess {
-            pid: pid.as_u32(),
-            name,
-            executable_path,
-            entitlements: vec![], // Will be populated later for new processes only
-            discovery_timestamp: timestamp,
-        };
-
-        processes.insert(pid.as_u32(), monitored_process);
-    }
-
-    Ok(ProcessSnapshot {
-        processes,
-    })
-}
-
-fn extract_process_entitlements(executable_path: &std::path::Path) -> Result<Vec<String>> {
-    // Reuse existing entitlement extraction logic
-    match crate::entitlements::extract_entitlements(executable_path) {
-        Ok(entitlements_map) => Ok(entitlements_map.keys().cloned().collect()),
-        Err(e) => Err(e),
-    }
 }
 
 fn apply_filters(

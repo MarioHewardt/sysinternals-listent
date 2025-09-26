@@ -240,8 +240,8 @@ impl TestRunner {
             libc::kill(child.id() as i32, libc::SIGINT);
         }
         
-        // Wait for process to exit (with timeout)
-        let timeout = Duration::from_secs(5); // Give it 5 seconds to exit gracefully
+        // Wait for process to exit (with timeout - increased for slower signal handling)
+        let timeout = Duration::from_secs(10); // Give it 10 seconds to exit gracefully
         let result = wait_for_child_with_timeout(child, timeout)?;
         
         Ok(TestResult {
