@@ -16,6 +16,12 @@ A fast command-line tool to discover and list code signing entitlements for macO
 - **Multiple paths**: Scan multiple directories in a single command
 - **Graceful interrupts**: Clean cancellation with Ctrl+C
 
+## Install
+Please see installation instructions [here](INSTALL.md).
+
+## Development
+Please see development instructions [here](DEVELOPMENT.md).
+
 ### Operating Modes
 
 #### 1. Static Scan Mode (Default)
