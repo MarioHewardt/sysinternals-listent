@@ -357,7 +357,7 @@ If you believe you have found a security issue, please follow the disclosure pro
 
 ## License
 
-MIT OR Apache-2.0
+MIT
 
 ## Support
 
