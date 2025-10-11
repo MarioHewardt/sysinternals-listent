@@ -1,5 +1,5 @@
 # Development
-_JCD was vibe coded by Mark Russinovich, Mario Hewardt with Github Copilot Agent and Claude Sonnet 4._
+_JCD was vibe coded by Mark Russinovich, Mario Hewardt with Github Copilot Agent and Claude Sonnet 4.5_
 ## Build
 1. **Clone and Build**:
    ```bash
