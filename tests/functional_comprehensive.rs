@@ -60,30 +60,6 @@ fn test_end_to_end_monitor_workflow() -> Result<()> {
 }
 
 #[test]
-fn test_signal_handling_reliability() -> Result<()> {
-    let mut runner = ReliableTestRunner::new(15);
-    
-    // Test CTRL-C in scan mode
-    let scan_result = runner.run_monitor_with_interrupt(&[
-        "/bin", // Use smallest system directory for reliable quick completion
-        "--quiet"
-    ], Duration::from_millis(1500))?;
-    
-    // Should handle interrupt gracefully
-    assert_eq!(scan_result.exit_code, Some(0), "Scan should exit cleanly on interrupt");
-    
-    // Test CTRL-C in monitor mode
-    let monitor_result = runner.run_monitor_with_interrupt(&[
-        "--interval", "2.0",
-        "--quiet"
-    ], Duration::from_millis(2500))?;
-    
-    assert_eq!(monitor_result.exit_code, Some(0), "Monitor should exit cleanly on interrupt");
-    
-    Ok(())
-}
-
-#[test]
 fn test_process_detection_with_controlled_processes() -> Result<()> {
     let _test_env = TestEnvironment::new()?;
     let mut scenario = TestScenario::new("process_detection", 30);

@@ -137,11 +137,14 @@ pub struct LogEntry {
     pub process_context: Option<MonitoredProcess>,
 }
 
-/// Custom error types for monitoring operations
-#[derive(Debug, thiserror::Error)]
-pub enum MonitorError {
-    #[error("Invalid polling interval: {0}. Must be between {} and {} seconds", MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL)]
-    InvalidInterval(f64),
+// Custom error messages for monitoring operations
+pub fn invalid_interval_error(interval: f64) -> anyhow::Error {
+    anyhow::anyhow!(
+        "Invalid polling interval: {}. Must be between {} and {} seconds",
+        interval,
+        MIN_POLLING_INTERVAL,
+        MAX_POLLING_INTERVAL
+    )
 }
 
 impl ProcessSnapshot {

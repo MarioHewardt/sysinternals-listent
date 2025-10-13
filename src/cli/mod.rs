@@ -11,7 +11,7 @@
 use clap::Parser;
 use std::path::PathBuf;
 use anyhow::{Result, anyhow};
-use crate::models::{ScanFilters, PollingConfiguration, ScanConfig, MonitorError};
+use crate::models::{ScanFilters, PollingConfiguration, ScanConfig};
 use crate::constants::{MIN_POLLING_INTERVAL, MAX_POLLING_INTERVAL, DEFAULT_SCAN_PATHS, format_validation_error};
 use std::time::Duration;
 
@@ -141,7 +141,7 @@ pub fn parse_monitor_config() -> Result<PollingConfiguration> {
 
     // Validate interval range
     if args.interval < MIN_POLLING_INTERVAL || args.interval > MAX_POLLING_INTERVAL {
-        return Err(MonitorError::InvalidInterval(args.interval).into());
+        return Err(crate::models::invalid_interval_error(args.interval));
     }
 
     // Validate entitlement filters if provided
@@ -219,7 +219,7 @@ pub fn parse_daemon_config() -> Result<(f64, Vec<PathBuf>, Vec<String>, bool)> {
 fn validate_args_compatibility(args: &Args) -> Result<()> {
     // Monitor mode specific validation (applies to both monitor and daemon modes)
     if (args.monitor || args.daemon) && (args.interval < MIN_POLLING_INTERVAL || args.interval > MAX_POLLING_INTERVAL) {
-        return Err(MonitorError::InvalidInterval(args.interval).into());
+        return Err(crate::models::invalid_interval_error(args.interval));
     }
 
     // Cannot use both daemon and monitor flags together
