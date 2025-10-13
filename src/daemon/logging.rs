@@ -9,8 +9,6 @@ use oslog::OsLog;
 pub struct DaemonLogger {
     /// ULS logger instance
     logger: OsLog,
-    /// ULS category for organizing logs  
-    category: String,
 }
 
 impl DaemonLogger {
@@ -19,7 +17,6 @@ impl DaemonLogger {
         let logger = OsLog::new(APP_SUBSYSTEM, &category);
         Ok(Self {
             logger,
-            category,
         })
     }
 
@@ -83,16 +80,6 @@ impl DaemonLogger {
             pid, name, path.display(), entitlements_str
         );
         self.logger.info(&message);
-        Ok(())
-    }
-
-    /// Log performance metrics
-    pub fn log_performance(&self, duration_ms: f64, processes_scanned: usize, new_processes: usize) -> Result<()> {
-        let message = format!(
-            "Poll cycle: duration_ms={:.2} processes_scanned={} new_processes={}",
-            duration_ms, processes_scanned, new_processes
-        );
-        self.logger.debug(&message);
         Ok(())
     }
 }

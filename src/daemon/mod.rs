@@ -6,7 +6,6 @@
 //! - LaunchD integration for system service management
 //! - Enhanced Unified Logging System integration
 
-pub mod config;
 pub mod launchd;
 pub mod logging;
 
