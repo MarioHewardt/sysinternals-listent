@@ -129,4 +129,26 @@ mod tests {
         assert_eq!(result.entitlement_count, result.entitlements.len());
         assert_eq!(result.entitlement_count, 2);
     }
+
+    #[test]
+    fn test_invalid_interval_error_message() {
+        let error = invalid_interval_error(500.0);
+        let error_msg = error.to_string();
+        
+        assert!(error_msg.contains("Invalid polling interval: 500"));
+        assert!(error_msg.contains("Must be between"));
+        assert!(error_msg.contains("0.1"));
+        assert!(error_msg.contains("300"));
+    }
+
+    #[test]
+    fn test_invalid_interval_error_boundary_values() {
+        // Test below minimum
+        let error = invalid_interval_error(0.05);
+        assert!(error.to_string().contains("0.05"));
+        
+        // Test above maximum
+        let error = invalid_interval_error(301.0);
+        assert!(error.to_string().contains("301"));
+    }
 }

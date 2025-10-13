@@ -110,7 +110,7 @@ fn is_executable_binary(path: &Path) -> bool {
         return false;
     }
     
-    // Check for Mach-O magic numbers
+        // Check for Mach-O magic numbers
     is_macho_binary(&buffer)
 }
 
@@ -125,3 +125,123 @@ fn is_macho_binary(magic_bytes: &[u8; 4]) -> bool {
         [0xbe, 0xba, 0xfe, 0xca]   // FAT_MAGIC (universal binary, swapped)
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_is_macho_binary_with_valid_magic() {
+        // Test 64-bit little endian (most common on modern macOS)
+        assert!(is_macho_binary(&[0xcf, 0xfa, 0xed, 0xfe]));
+        
+        // Test 64-bit big endian
+        assert!(is_macho_binary(&[0xfe, 0xed, 0xfa, 0xcf]));
+        
+        // Test universal binary
+        assert!(is_macho_binary(&[0xca, 0xfe, 0xba, 0xbe]));
+    }
+
+    #[test]
+    fn test_is_macho_binary_with_invalid_magic() {
+        // Random bytes
+        assert!(!is_macho_binary(&[0x00, 0x00, 0x00, 0x00]));
+        
+        // ELF magic (Linux)
+        assert!(!is_macho_binary(&[0x7f, 0x45, 0x4c, 0x46]));
+        
+        // Text file (shebang)
+        assert!(!is_macho_binary(&[0x23, 0x21, 0x2f, 0x62]));
+    }
+
+    #[test]
+    fn test_check_single_file_with_nonexistent_path() {
+        let path = Path::new("/nonexistent/path/to/binary");
+        let result = check_single_file(path);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_check_file_with_text_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        
+        // Create a text file
+        let mut file = fs::File::create(&file_path).unwrap();
+        writeln!(file, "This is a text file").unwrap();
+        
+        let result = check_file(&file_path);
+        assert!(result.is_none(), "Text file should not be detected as binary");
+    }
+
+    #[test]
+    fn test_check_file_with_non_executable() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("non_executable");
+        
+        // Create a file with Mach-O magic but no execute permissions
+        let mut file = fs::File::create(&file_path).unwrap();
+        file.write_all(&[0xcf, 0xfa, 0xed, 0xfe]).unwrap();
+        
+        // Set non-executable permissions (644)
+        let mut perms = fs::metadata(&file_path).unwrap().permissions();
+        perms.set_mode(0o644);
+        fs::set_permissions(&file_path, perms).unwrap();
+        
+        let result = check_file(&file_path);
+        assert!(result.is_none(), "Non-executable file should not be detected");
+    }
+
+    #[test]
+    fn test_check_file_with_executable_macho() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test_binary");
+        
+        // Create a file with Mach-O magic and execute permissions
+        let mut file = fs::File::create(&file_path).unwrap();
+        file.write_all(&[0xcf, 0xfa, 0xed, 0xfe]).unwrap();
+        
+        // Set executable permissions (755)
+        let mut perms = fs::metadata(&file_path).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&file_path, perms).unwrap();
+        
+        let result = check_file(&file_path);
+        assert!(result.is_some(), "Executable Mach-O file should be detected");
+        assert_eq!(result.unwrap().path, file_path);
+    }
+
+    #[test]
+    fn test_check_file_with_directory() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path();
+        
+        let result = check_file(dir_path);
+        assert!(result.is_none(), "Directory should not be detected as binary");
+    }
+
+    #[test]
+    fn test_is_executable_binary_real_system_binary() {
+        // Test with real system binary (ls should exist on all macOS systems)
+        let ls_path = Path::new("/bin/ls");
+        if ls_path.exists() {
+            assert!(is_executable_binary(ls_path), "/bin/ls should be detected as executable binary");
+        }
+    }
+
+    #[test]
+    fn test_check_single_file_integration() {
+        // Test with real system binary
+        let ls_path = Path::new("/bin/ls");
+        if ls_path.exists() {
+            let result = check_single_file(ls_path);
+            assert!(result.is_some(), "check_single_file should detect /bin/ls");
+            assert_eq!(result.unwrap().path, ls_path);
+        }
+    }
+}
+

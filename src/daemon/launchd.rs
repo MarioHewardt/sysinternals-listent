@@ -154,3 +154,177 @@ impl LaunchDPlist {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_launchd_plist_creation() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        
+        assert_eq!(plist.label, "com.microsoft.sysinternals.listent");
+        assert_eq!(plist.program_arguments.len(), 2);
+        assert_eq!(plist.program_arguments[0], "/usr/local/bin/listent");
+        assert_eq!(plist.program_arguments[1], "--daemon");
+        assert!(plist.run_at_load);
+        assert!(plist.keep_alive);
+    }
+
+    #[test]
+    fn test_plist_xml_structure() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        // Check XML structure
+        assert!(xml.contains("<?xml version=\"1.0\""));
+        assert!(xml.contains("<!DOCTYPE plist"));
+        assert!(xml.contains("<plist version=\"1.0\">"));
+        assert!(xml.contains("</plist>"));
+    }
+
+    #[test]
+    fn test_plist_contains_label() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>Label</key>"));
+        assert!(xml.contains("<string>com.microsoft.sysinternals.listent</string>"));
+    }
+
+    #[test]
+    fn test_plist_contains_program_arguments() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>ProgramArguments</key>"));
+        assert!(xml.contains("<array>"));
+        assert!(xml.contains("<string>/usr/local/bin/listent</string>"));
+        assert!(xml.contains("<string>--daemon</string>"));
+    }
+
+    #[test]
+    fn test_plist_contains_run_at_load() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>RunAtLoad</key>"));
+        assert!(xml.contains("<true/>"));
+    }
+
+    #[test]
+    fn test_plist_contains_keep_alive() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>KeepAlive</key>"));
+        assert!(xml.contains("<true/>"));
+    }
+
+    #[test]
+    fn test_plist_contains_working_directory() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>WorkingDirectory</key>"));
+        assert!(xml.contains("<string>/var/run/listent</string>"));
+    }
+
+    #[test]
+    fn test_plist_contains_log_paths() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>StandardOutPath</key>"));
+        assert!(xml.contains("<string>/var/log/listent/daemon.log</string>"));
+        assert!(xml.contains("<key>StandardErrorPath</key>"));
+    }
+
+    #[test]
+    fn test_plist_contains_environment_variables() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<key>EnvironmentVariables</key>"));
+        assert!(xml.contains("<dict>"));
+        assert!(xml.contains("<key>PATH</key>"));
+        assert!(xml.contains("<string>/usr/bin:/bin:/usr/sbin:/sbin</string>"));
+        assert!(xml.contains("<key>LISTENT_DAEMON_CHILD</key>"));
+        assert!(xml.contains("<string>1</string>"));
+    }
+
+    #[test]
+    fn test_plist_xml_well_formed() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        // Check balanced tags
+        let opening_tags = xml.matches("<dict>").count();
+        let closing_tags = xml.matches("</dict>").count();
+        assert_eq!(opening_tags, closing_tags, "dict tags should be balanced");
+        
+        let array_open = xml.matches("<array>").count();
+        let array_close = xml.matches("</array>").count();
+        assert_eq!(array_open, array_close, "array tags should be balanced");
+    }
+
+    #[test]
+    fn test_plist_custom_daemon_path() {
+        let daemon_path = Path::new("/custom/path/to/daemon");
+        let plist = LaunchDPlist::new(daemon_path);
+        let xml = plist.generate_plist().unwrap();
+        
+        assert!(xml.contains("<string>/custom/path/to/daemon</string>"));
+    }
+
+    #[test]
+    fn test_plist_without_environment_variables() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let mut plist = LaunchDPlist::new(daemon_path);
+        plist.environment_variables = None;
+        
+        let xml = plist.generate_plist().unwrap();
+        assert!(!xml.contains("<key>EnvironmentVariables</key>"));
+    }
+
+    #[test]
+    fn test_plist_without_working_directory() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let mut plist = LaunchDPlist::new(daemon_path);
+        plist.working_directory = None;
+        
+        let xml = plist.generate_plist().unwrap();
+        assert!(!xml.contains("<key>WorkingDirectory</key>"));
+    }
+
+    #[test]
+    fn test_plist_run_at_load_false() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let mut plist = LaunchDPlist::new(daemon_path);
+        plist.run_at_load = false;
+        
+        let xml = plist.generate_plist().unwrap();
+        assert!(xml.contains("<key>RunAtLoad</key>"));
+        assert!(xml.contains("<false/>"));
+    }
+
+    #[test]
+    fn test_plist_keep_alive_false() {
+        let daemon_path = Path::new("/usr/local/bin/listent");
+        let mut plist = LaunchDPlist::new(daemon_path);
+        plist.keep_alive = false;
+        
+        let xml = plist.generate_plist().unwrap();
+        assert!(xml.contains("<key>KeepAlive</key>"));
+        assert!(xml.contains("<false/>"));
+    }
+}
