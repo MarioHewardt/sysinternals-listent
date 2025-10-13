@@ -2,23 +2,23 @@
 
 use anyhow::Result;
 use std::path::PathBuf;
+use crate::constants::APP_SUBSYSTEM;
+use oslog::OsLog;
 
 /// Enhanced daemon logger for macOS ULS integration
-#[derive(Debug, Clone)]
 pub struct DaemonLogger {
-    /// macOS ULS subsystem identifier
-    #[allow(dead_code)]
-    subsystem: String,
+    /// ULS logger instance
+    logger: OsLog,
     /// ULS category for organizing logs  
-    #[allow(dead_code)]
     category: String,
 }
 
 impl DaemonLogger {
-    /// Create a new DaemonLogger instance
-    pub fn new(subsystem: String, category: String) -> Result<Self> {
+    /// Create a new DaemonLogger instance with APP_SUBSYSTEM
+    pub fn new(category: String) -> Result<Self> {
+        let logger = OsLog::new(APP_SUBSYSTEM, &category);
         Ok(Self {
-            subsystem,
+            logger,
             category,
         })
     }
@@ -26,32 +26,73 @@ impl DaemonLogger {
     /// Log daemon startup with configuration
     pub fn log_startup_with_args(
         &self,
-        _interval: f64,
-        _paths: &[PathBuf],
-        _entitlements: &[String],
-        _pid: u32,
+        interval: f64,
+        paths: &[PathBuf],
+        entitlements: &[String],
+        pid: u32,
     ) -> Result<()> {
+        let paths_str = paths.iter()
+            .map(|p| p.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let entitlements_str = entitlements.join(", ");
+        
+        let message = format!(
+            "Daemon started: pid={} interval={}s paths=[{}] entitlements=[{}]",
+            pid, interval, paths_str, entitlements_str
+        );
+        self.logger.info(&message);
         Ok(())
     }
 
     /// Log daemon shutdown
-    pub fn log_shutdown(&self, _message: &str) -> Result<()> {
+    pub fn log_shutdown(&self, message: &str) -> Result<()> {
+        let log_message = format!("Daemon shutdown: {}", message);
+        self.logger.info(&log_message);
         Ok(())
     }
 
     /// Log error message
-    pub fn log_error(&self, _message: &str, _details: Option<&str>) -> Result<()> {
+    pub fn log_error(&self, message: &str, details: Option<&str>) -> Result<()> {
+        let log_message = match details {
+            Some(details) => format!("Error: {} - {}", message, details),
+            None => format!("Error: {}", message),
+        };
+        self.logger.error(&log_message);
+        Ok(())
+    }
+    
+    /// Log informational message
+    pub fn log_info(&self, message: &str) -> Result<()> {
+        self.logger.info(message);
         Ok(())
     }
 
     /// Log process detection event
     pub fn log_process_detection(
         &self,
-        _pid: u32,
-        _name: &str,
-        _path: &std::path::Path,
-        _entitlements: &[String],
+        pid: u32,
+        name: &str,
+        path: &std::path::Path,
+        entitlements: &[String],
     ) -> Result<()> {
+        let entitlements_str = entitlements.join(", ");
+        
+        let message = format!(
+            "Process detected: pid={} name={} path={} entitlements=[{}]",
+            pid, name, path.display(), entitlements_str
+        );
+        self.logger.info(&message);
+        Ok(())
+    }
+
+    /// Log performance metrics
+    pub fn log_performance(&self, duration_ms: f64, processes_scanned: usize, new_processes: usize) -> Result<()> {
+        let message = format!(
+            "Poll cycle: duration_ms={:.2} processes_scanned={} new_processes={}",
+            duration_ms, processes_scanned, new_processes
+        );
+        self.logger.debug(&message);
         Ok(())
     }
 }

@@ -144,28 +144,41 @@ async fn run_daemon_process_with_args(
     paths: Vec<PathBuf>,
     entitlements: Vec<String>,
 ) -> Result<()> {
+    // Create startup logger to track initialization
+    let startup_logger = DaemonLogger::new("startup".to_string())?;
+    startup_logger.log_info("Daemon process starting - creating loggers")?;
+    
     // Create simplified logger (no complex config needed)
-    let logger = DaemonLogger::new(
-        APP_SUBSYSTEM.to_string(),
-        DAEMON_CATEGORY.to_string(),
-    )?;
+    let logger = DaemonLogger::new(DAEMON_CATEGORY.to_string())?;
+    startup_logger.log_info("Main daemon logger created successfully")?;
 
     // Log startup with CLI arguments
     logger.log_startup_with_args(interval, &paths, &entitlements, std::process::id())?;
+    startup_logger.log_info(&format!("Startup logged - PID: {}, interval: {}s, paths: {:?}", 
+        std::process::id(), interval, paths))?;
 
     // Setup signal handling for graceful shutdown
+    startup_logger.log_info("Setting up signal handlers")?;
     let shutdown_signal = setup_signal_handlers();
+    startup_logger.log_info("Signal handlers configured")?;
 
     // Main monitoring loop with CLI arguments
+    // Create a separate logger for the monitoring task
+    startup_logger.log_info("Creating monitoring task")?;
     let monitoring_task = {
-        let logger_clone = logger.clone();
+        let monitoring_logger = DaemonLogger::new("process-detection".to_string())?;
+        let error_logger = DaemonLogger::new("error".to_string())?;
+        
+        startup_logger.log_info("Monitoring logger created, spawning monitoring task")?;
         
         tokio::spawn(async move {
-            if let Err(e) = run_simplified_monitoring_loop(interval, paths, entitlements, logger_clone).await {
-                eprintln!("❌ Monitoring loop error: {}", e);
+            if let Err(e) = run_simplified_monitoring_loop(interval, paths, entitlements, monitoring_logger).await {
+                let _ = error_logger.log_error(&format!("Monitoring loop error: {}", e), None);
             }
         })
     };
+    
+    startup_logger.log_info("Daemon fully initialized - entering main loop")?;
 
     // Wait for shutdown signal
     tokio::select! {
@@ -187,11 +200,17 @@ async fn run_simplified_monitoring_loop(
     entitlements: Vec<String>,
     logger: DaemonLogger,
 ) -> Result<()> {
+    logger.log_info("Monitoring loop started")?;
+    logger.log_info(&format!("Configuration: interval={}s, paths={:?}, entitlements={:?}", 
+        interval, paths, entitlements))?;
+    
     let mut interval_timer = tokio::time::interval(Duration::from_secs_f64(interval));
     let mut monitoring_core = ProcessMonitoringCore::new();
+    logger.log_info("ProcessMonitoringCore initialized")?;
 
     loop {
         interval_timer.tick().await;
+        logger.log_info("Poll cycle starting")?;
 
         // Create polling configuration from CLI arguments
         let polling_config = PollingConfiguration {
@@ -206,7 +225,10 @@ async fn run_simplified_monitoring_loop(
 
         // Use shared monitoring core to detect new processes
         let new_processes = match monitoring_core.scan_and_detect_new(&monitoring_config) {
-            Ok(processes) => processes,
+            Ok(processes) => {
+                logger.log_info(&format!("Scan completed - found {} new processes", processes.len()))?;
+                processes
+            },
             Err(e) => {
                 logger.log_error(&format!("Failed to scan processes: {}", e), None)?;
                 continue;
@@ -216,14 +238,13 @@ async fn run_simplified_monitoring_loop(
         // Log any new processes with entitlements (silent operation)
         for process in new_processes {
             if !process.entitlements.is_empty() {
-                if let Err(e) = logger.log_process_detection(
+                // Best effort logging - ignore errors silently in daemon mode
+                let _ = logger.log_process_detection(
                     process.pid,
                     &process.name,
                     &process.executable_path,
                     &process.entitlements,
-                ) {
-                    eprintln!("❌ Failed to log process {}: {}", process.name, e);
-                }
+                );
             }
         }
     }

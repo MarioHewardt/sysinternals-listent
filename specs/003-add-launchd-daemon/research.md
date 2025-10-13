@@ -29,14 +29,14 @@
 ## Technical Research
 
 ### LaunchD Integration Patterns
-**Plist Location**: `/Library/LaunchDaemons/com.github.mariohewardt.listent.plist`
-**Service Name**: `com.github.mariohewardt.listent`
+**Plist Location**: `/Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist`
+**Service Name**: `com.microsoft.sysinternals.listent`
 **User Context**: Run as root for system-wide process access
 
 **Required Plist Keys**:
 ```xml
 <key>Label</key>
-<string>com.github.mariohewardt.listent</string>
+<string>com.microsoft.sysinternals.listent</string>
 <key>ProgramArguments</key>
 <array>
     <string>/usr/local/bin/listent</string>
@@ -77,7 +77,7 @@ polling_interval = 1.0
 auto_start = true
 
 [logging]
-subsystem = "com.github.mariohewardt.listent"
+subsystem = "com.microsoft.sysinternals.listent"
 level = "info"
 
 [monitoring]
@@ -102,7 +102,7 @@ socket_permissions = 0o600
 
 **Log Format**:
 ```
-[subsystem: com.github.mariohewardt.listent]
+[subsystem: com.microsoft.sysinternals.listent]
 [category: process-detection]
 Process detected: name=ps, pid=12345, path=/bin/ps, entitlements=["com.apple.system-task-ports.read"]
 ```

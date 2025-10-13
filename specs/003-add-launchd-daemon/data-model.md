@@ -27,7 +27,7 @@ pub struct DaemonSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingSettings {
-    pub subsystem: String,          // "com.github.mariohewardt.listent"
+    pub subsystem: String,          // "com.microsoft.sysinternals.listent"
     pub level: LogLevel,            // Debug, Info, Warning, Error
     pub structured: bool,           // Enable structured logging
 }
@@ -124,7 +124,7 @@ pub struct ConfigUpdates {
 ```rust
 #[derive(Debug, Clone)]
 pub struct LaunchDPlist {
-    pub label: String,              // com.github.mariohewardt.listent
+    pub label: String,              // com.microsoft.sysinternals.listent
     pub program_arguments: Vec<String>,
     pub run_at_load: bool,
     pub keep_alive: bool,

@@ -33,7 +33,7 @@ max_memory_mb = 50
 
 [logging]
 # Unified Logging System subsystem identifier
-subsystem = "com.github.mariohewardt.listent"
+subsystem = "com.microsoft.sysinternals.listent"
 
 # Log level: debug, info, warning, error
 level = "info"
@@ -319,7 +319,7 @@ impl Default for DaemonConfiguration {
                 max_memory_mb: 50,
             },
             logging: LoggingSettings {
-                subsystem: "com.github.mariohewardt.listent".to_string(),
+                subsystem: "com.microsoft.sysinternals.listent".to_string(),
                 level: LogLevel::Info,
                 structured: true,
                 include_performance: false,

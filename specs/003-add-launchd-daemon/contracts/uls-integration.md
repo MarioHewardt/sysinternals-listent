@@ -6,7 +6,7 @@
 ## Logging Architecture
 
 ### Subsystem and Categories
-**Subsystem**: `com.github.mariohewardt.listent`
+**Subsystem**: `com.microsoft.sysinternals.listent`
 **Categories**:
 - `process-detection`: New process discoveries and monitoring events
 - `configuration`: Configuration changes, validation, and reloads
@@ -33,27 +33,22 @@ pub enum LogLevel {
 
 ```rust
 // Structured log entry
-os_log!(
-    subsystem: "com.github.mariohewardt.listent",
-    category: "process-detection", 
-    "Process detected: name=%{public}s pid=%d path=%{private}s entitlements=%{public}s",
-    process.name,
-    process.pid,
-    process.executable_path.display(),
-    entitlements_json
-);
+                oslog::Oslog::new(
+                    subsystem: "com.microsoft.sysinternals.listent",
+                    category: "test",
+                )
 ```
 
 **Console Output Example**:
 ```
-2025-09-20 10:15:23.456789-0700 listent[1234:567890] [com.github.mariohewardt.listent:process-detection] Process detected: name=Safari pid=5432 path=<private> entitlements=["com.apple.security.network.client","com.apple.security.files.user-selected.read-write"]
+2025-09-20 10:15:23.456789-0700 listent[1234:567890] [com.microsoft.sysinternals.listent:process-detection] Process detected: name=Safari pid=5432 path=<private> entitlements=["com.apple.security.network.client","com.apple.security.files.user-selected.read-write"]
 ```
 
 **Structured Data**:
 ```json
 {
   "timestamp": "2025-09-20T17:15:23.456789Z",
-  "subsystem": "com.github.mariohewardt.listent", 
+  "subsystem": "com.microsoft.sysinternals.listent", 
   "category": "process-detection",
   "level": "info",
   "process": {
@@ -82,7 +77,7 @@ os_log!(
 ```rust
 // Configuration update
 os_log!(
-    subsystem: "com.github.mariohewardt.listent",
+    subsystem: "com.microsoft.sysinternals.listent",
     category: "configuration",
     "Configuration updated: field=%{public}s old_value=%{public}s new_value=%{public}s source=%{public}s",
     field_name,
@@ -93,7 +88,7 @@ os_log!(
 
 // Validation failure
 os_log_error!(
-    subsystem: "com.github.mariohewardt.listent", 
+    subsystem: "com.microsoft.sysinternals.listent", 
     category: "configuration",
     "Configuration validation failed: field=%{public}s value=%{public}s error=%{public}s",
     field_name,
@@ -109,7 +104,7 @@ os_log_error!(
 ```rust
 // Daemon startup
 os_log!(
-    subsystem: "com.github.mariohewardt.listent",
+    subsystem: "com.microsoft.sysinternals.listent",
     category: "daemon-lifecycle",
     "Daemon started: pid=%d config_path=%{public}s monitoring_scope=%{public}s",
     daemon_pid,
@@ -119,7 +114,7 @@ os_log!(
 
 // Daemon shutdown
 os_log!(
-    subsystem: "com.github.mariohewardt.listent", 
+    subsystem: "com.microsoft.sysinternals.listent", 
     category: "daemon-lifecycle",
     "Daemon stopping: reason=%{public}s uptime=%{public}s processes_detected=%ld",
     shutdown_reason,
@@ -135,7 +130,7 @@ os_log!(
 ```rust
 // Regular performance logging (debug level, rate-limited)
 os_log_debug!(
-    subsystem: "com.github.mariohewardt.listent",
+    subsystem: "com.microsoft.sysinternals.listent",
     category: "performance", 
     "Poll cycle completed: duration_ms=%f processes_scanned=%d new_processes=%d memory_mb=%f",
     poll_duration.as_secs_f64() * 1000.0,
@@ -146,7 +141,7 @@ os_log_debug!(
 
 // Performance warning
 os_log_error!(
-    subsystem: "com.github.mariohewardt.listent",
+    subsystem: "com.microsoft.sysinternals.listent",
     category: "performance",
     "Performance warning: poll_duration_ms=%f exceeds_threshold=%f memory_mb=%f",
     slow_poll_duration,
@@ -200,20 +195,20 @@ listent logs --filter-json '{"process.pid": 5432}'
 #### Using macOS log command
 ```bash
 # All listent daemon logs
-log show --predicate 'subsystem == "com.github.mariohewardt.listent"' --last 1h
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent"' --last 1h
 
-# Process detection events only  
-log show --predicate 'subsystem == "com.github.mariohewardt.listent" AND category == "process-detection"' --style json
+# Category-specific filtering
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent" AND category == "process-detection"' --style json
 
-# Performance issues
-log show --predicate 'subsystem == "com.github.mariohewardt.listent" AND category == "performance" AND messageType == "error"'
+# Error messages only
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent" AND category == "performance" AND messageType == "error"'
 
-# Specific time range with structured output
-log show --predicate 'subsystem == "com.github.mariohewardt.listent"' --start "2025-09-20 09:00" --end "2025-09-20 12:00" --style ndjson
+# Time range with structured output
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent"' --start "2025-09-20 09:00" --end "2025-09-20 12:00" --style ndjson
 ```
 
 #### Console.app Integration
-1. **Filter Setup**: Create saved search for subsystem `com.github.mariohewardt.listent`
+1. **Filter Setup**: Create saved search for subsystem `com.microsoft.sysinternals.listent`
 2. **Category Columns**: Add category column for easy filtering
 3. **Custom Predicates**: Save common queries for reuse
 4. **Export Options**: JSON/CSV export for analysis
@@ -240,7 +235,7 @@ impl LogRateLimiter {
             // Log suppression summary if needed
             if self.suppressed_count > 0 {
                 os_log!(
-                    subsystem: "com.github.mariohewardt.listent",
+                    subsystem: "com.microsoft.sysinternals.listent",
                     category: "performance",
                     "Log rate limiting: suppressed %d messages in previous minute",
                     self.suppressed_count

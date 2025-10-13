@@ -45,6 +45,7 @@ impl LaunchDPlist {
             environment_variables: Some({
                 let mut env = std::collections::HashMap::new();
                 env.insert("PATH".to_string(), "/usr/bin:/bin:/usr/sbin:/sbin".to_string());
+                env.insert("LISTENT_DAEMON_CHILD".to_string(), "1".to_string());
                 env
             }),
         }

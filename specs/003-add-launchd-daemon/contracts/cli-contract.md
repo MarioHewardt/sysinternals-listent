@@ -45,8 +45,8 @@ listent install-daemon [OPTIONS]
 # Success
 $ sudo listent install-daemon
 ✓ Created configuration: /etc/listent/daemon.toml
-✓ Generated launchd plist: /Library/LaunchDaemons/com.github.mariohewardt.listent.plist
-✓ Loaded daemon service: com.github.mariohewardt.listent
+✓ Generated launchd plist: /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist
+✓ Loaded daemon service: com.microsoft.sysinternals.listent
 ✓ Daemon started successfully (PID: 1234)
 
 Daemon is now monitoring all processes. Use 'listent daemon-status' to check status.
@@ -69,8 +69,8 @@ Current status: Running (PID: 1234)
   "success": true,
   "daemon_pid": 1234,
   "config_path": "/etc/listent/daemon.toml",
-  "plist_path": "/Library/LaunchDaemons/com.github.mariohewardt.listent.plist",
-  "service_name": "com.github.mariohewardt.listent",
+  "plist_path": "/Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist",
+  "service_name": "com.microsoft.sysinternals.listent",
   "auto_start": true
 }
 ```
@@ -99,9 +99,9 @@ listent uninstall-daemon [OPTIONS]
 ```bash
 # Success
 $ sudo listent uninstall-daemon
-✓ Stopped daemon service: com.github.mariohewardt.listent
+✓ Stopped daemon service: com.microsoft.sysinternals.listent
 ✓ Unloaded launchd plist
-✓ Removed plist file: /Library/LaunchDaemons/com.github.mariohewardt.listent.plist
+✓ Removed plist file: /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist
 ✓ Removed configuration: /etc/listent/daemon.toml
 ✓ Cleaned up runtime files
 
