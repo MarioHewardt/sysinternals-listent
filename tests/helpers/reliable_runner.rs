@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::process::{Command, Child};
 use std::time::{Duration, Instant};
 use std::sync::mpsc;
@@ -7,12 +9,7 @@ use anyhow::Result;
 /// Test harness that ensures reliable cleanup and timeout handling
 pub struct ReliableTestRunner {
     timeout: Duration,
-    cleanup_handles: Vec<CleanupHandle>,
-}
-
-enum CleanupHandle {
-    Process(u32), // PID to kill
-    TempDir(tempfile::TempDir), // Temp directory to clean
+    cleanup_handles: Vec<u32>,  // Just PIDs
 }
 
 impl ReliableTestRunner {
@@ -34,11 +31,10 @@ impl ReliableTestRunner {
         let mut child = cmd.spawn()?;
         
         // Register for cleanup
-        self.cleanup_handles.push(CleanupHandle::Process(child.id()));
+        self.cleanup_handles.push(child.id());
         
         // Set up timeout mechanism
         let (tx, rx) = mpsc::channel();
-        let _child_id = child.id();
         let timeout = self.timeout;
         
         // Spawn timeout thread
@@ -66,8 +62,6 @@ impl ReliableTestRunner {
     
     /// Run listent in monitor mode with controlled interruption
     pub fn run_monitor_with_interrupt(&mut self, args: &[&str], interrupt_after: Duration) -> Result<TestOutput> {
-        let _start = Instant::now();
-        
         let mut cmd = Command::new("./target/release/listent");
         cmd.arg("--monitor");
         for arg in args {
@@ -79,7 +73,7 @@ impl ReliableTestRunner {
         cmd.stderr(std::process::Stdio::piped());
         
         let child = cmd.spawn()?;
-        self.cleanup_handles.push(CleanupHandle::Process(child.id()));
+        self.cleanup_handles.push(child.id());
         
         // Wait for specified duration
         thread::sleep(interrupt_after);
@@ -155,18 +149,11 @@ impl ReliableTestRunner {
 impl Drop for ReliableTestRunner {
     fn drop(&mut self) {
         // Clean up all registered resources
-        for handle in &self.cleanup_handles {
-            match handle {
-                CleanupHandle::Process(pid) => {
-                    // Try graceful shutdown first, then force kill
-                    let _ = self.send_sigint(*pid);
-                    thread::sleep(Duration::from_millis(500));
-                    let _ = self.kill_process(*pid);
-                },
-                CleanupHandle::TempDir(_) => {
-                    // TempDir will clean itself up when dropped
-                },
-            }
+        for pid in &self.cleanup_handles {
+            // Try graceful shutdown first, then force kill
+            let _ = self.send_sigint(*pid);
+            thread::sleep(Duration::from_millis(500));
+            let _ = self.kill_process(*pid);
         }
     }
 }
@@ -218,94 +205,20 @@ impl TestOutput {
     }
 }
 
-/// Spawn a test process that can be easily controlled and cleaned up
-pub struct ControlledTestProcess {
-    child: Child,
-    name: String,
-    expected_entitlements: Vec<String>,
-}
-
-impl ControlledTestProcess {
-    pub fn spawn(name: &str, binary_path: &std::path::Path, duration_seconds: f64, expected_entitlements: Vec<String>) -> Result<Self> {
-        let child = Command::new(binary_path)
-            .arg(duration_seconds.to_string())
-            .spawn()?;
-            
-        Ok(Self {
-            child,
-            name: name.to_string(),
-            expected_entitlements,
-        })
-    }
-    
-    pub fn pid(&self) -> u32 {
-        self.child.id()
-    }
-    
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    
-    pub fn expected_entitlements(&self) -> &[String] {
-        &self.expected_entitlements
-    }
-    
-    pub fn is_running(&mut self) -> Result<bool> {
-        match self.child.try_wait()? {
-            Some(_) => Ok(false),
-            None => Ok(true),
-        }
-    }
-    
-    pub fn terminate(&mut self) -> Result<()> {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        Ok(())
-    }
-}
-
-impl Drop for ControlledTestProcess {
-    fn drop(&mut self) {
-        let _ = self.terminate();
-    }
-}
-
 /// Test scenario builder for complex integration tests
 pub struct TestScenario {
-    name: String,
-    processes: Vec<ControlledTestProcess>,
     runner: ReliableTestRunner,
 }
 
 impl TestScenario {
-    pub fn new(name: &str, timeout_seconds: u64) -> Self {
+    pub fn new(_name: &str, timeout_seconds: u64) -> Self {
         Self {
-            name: name.to_string(),
-            processes: Vec::new(),
             runner: ReliableTestRunner::new(timeout_seconds),
         }
     }
     
-    pub fn spawn_process(&mut self, name: &str, binary_path: &std::path::Path, duration: f64, entitlements: Vec<String>) -> Result<()> {
-        let process = ControlledTestProcess::spawn(name, binary_path, duration, entitlements)?;
-        self.processes.push(process);
-        Ok(())
-    }
-    
     pub fn run_monitor_test(&mut self, monitor_args: &[&str], test_duration: Duration) -> Result<TestOutput> {
-        // Start monitor
-        let result = self.runner.run_monitor_with_interrupt(monitor_args, test_duration)?;
-        
-        // Clean up any remaining processes
-        for process in &mut self.processes {
-            let _ = process.terminate();
-        }
-        
-        Ok(result)
-    }
-    
-    pub fn get_process_pids(&self) -> Vec<u32> {
-        self.processes.iter().map(|p| p.pid()).collect()
+        self.runner.run_monitor_with_interrupt(monitor_args, test_duration)
     }
 }
 

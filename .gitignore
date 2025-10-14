@@ -11,3 +11,4 @@
 # LaunchD plists (in development)
 *.plist.dev
 help
+output.json

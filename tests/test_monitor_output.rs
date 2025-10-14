@@ -31,8 +31,6 @@ fn test_json_output_format() {
 
 #[test]
 fn test_timestamp_formatting() {
-#[test]
-fn test_timestamp_formatting() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&["--monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
@@ -41,7 +39,7 @@ fn test_timestamp_formatting() {
         .stdout(predicate::str::contains("Starting process monitoring"));
         // Timestamp validation would require actual process detection events
 }
-}
+
 
 #[test]
 fn test_entitlements_list_formatting() {

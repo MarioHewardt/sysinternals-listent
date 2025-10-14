@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -7,15 +9,15 @@ pub mod reliable_runner;
 
 /// Test helper for creating controlled test environments
 pub struct TestEnvironment {
-    pub temp_dir: TempDir,
-    pub test_binaries: Vec<TestBinary>,
+    temp_dir: TempDir,
+    test_binaries: Vec<TestBinary>,
 }
 
 #[derive(Debug, Clone)]
-pub struct TestBinary {
-    pub name: String,
-    pub path: PathBuf,
-    pub expected_entitlements: Vec<String>,
+struct TestBinary {
+    name: String,
+    path: PathBuf,
+    expected_entitlements: Vec<String>,
 }
 
 impl TestEnvironment {
@@ -174,13 +176,6 @@ print("Test binary exiting")
             
         Ok(child)
     }
-    
-    /// Get expected entitlements for a test binary
-    pub fn get_expected_entitlements(&self, binary_name: &str) -> Option<&Vec<String>> {
-        self.test_binaries.iter()
-            .find(|b| b.name == binary_name)
-            .map(|b| &b.expected_entitlements)
-    }
 }
 
 /// Test runner with timeout and cleanup
@@ -251,6 +246,27 @@ impl TestRunner {
             duration: start.elapsed(),
         })
     }
+
+    /// Run listent with specified command and args
+    pub fn run_command_with_timeout(&self, args: &[&str]) -> anyhow::Result<TestResult> {
+        let start = std::time::Instant::now();
+        
+        let mut cmd = Command::new("./target/release/listent");
+        for arg in args {
+            cmd.arg(arg);
+        }
+        
+        let output = cmd
+            .timeout(std::time::Duration::from_secs(self.timeout_seconds))
+            .output()?;
+            
+        Ok(TestResult {
+            exit_code: output.status.code(),
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            duration: start.elapsed(),
+        })
+    }
 }
 
 #[derive(Debug)]
@@ -273,6 +289,10 @@ impl TestResult {
     pub fn contains_stderr(&self, text: &str) -> bool {
         self.stderr.contains(text)
     }
+    
+    pub fn contains_output(&self, text: &str) -> bool {
+        self.stdout.contains(text) || self.stderr.contains(text)
+    }
 }
 
 /// Wait for a child process with timeout
@@ -281,7 +301,6 @@ fn wait_for_child_with_timeout(child: std::process::Child, timeout: std::time::D
     use std::thread;
     
     let (tx, _rx) = mpsc::channel();
-    let _child_id = child.id();
     
     // Spawn a thread to wait for the child
     thread::spawn(move || {
