@@ -194,42 +194,70 @@ listent --generate-completion fish > ~/.config/fish/completions/listent.fish
 ## Daemon Mode Setup
 
 ### Installation Requirements
-Daemon mode requires administrator privileges for LaunchD integration:
+Daemon mode provides continuous process monitoring as a macOS LaunchD service.
+
+**Key Points:**
+- Uses same CLI arguments as scan/monitor modes
+- No TOML config files - configuration via plist
+- Manual launchctl management (no automated install/uninstall commands)
+- Requires administrator privileges for system-wide installation
+
+### Generate LaunchD Plist
 
 ```bash
-# Install daemon service
-sudo listent install-daemon
+# Generate plist for user-level daemon (~/Library/LaunchAgents/)
+listent --daemon --launchd -e "com.apple.security.*" --interval 1.0 > ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
 
-# Verify daemon installation
-listent daemon-status
+# Generate plist for system-wide daemon (/Library/LaunchDaemons/)
+sudo listent --daemon --launchd -e "com.apple.security.*" --interval 1.0 > /Library/LaunchDaemons/com.github.mariohewardt.listent.plist
 ```
 
-### Configuration Files
-Daemon mode uses configuration files in standard locations:
+### Load and Start Daemon
 
 ```bash
-# System-wide configuration
-sudo mkdir -p /etc/listent
-sudo listent install-daemon --config /etc/listent/daemon.toml
+# User-level daemon
+launchctl load ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
 
-# User-specific configuration (if supported)
-mkdir -p ~/.config/listent
-listent install-daemon --config ~/.config/listent/daemon.toml --user-mode
+# System-wide daemon (requires sudo)
+sudo launchctl load /Library/LaunchDaemons/com.github.mariohewardt.listent.plist
 ```
 
 ### Daemon Management
+
 ```bash
-# Start daemon service
-sudo listent daemon-start
+# Check daemon status
+launchctl list | grep listent
 
-# Stop daemon service
-sudo listent daemon-stop
+# View daemon logs (ULS)
+log show --predicate 'subsystem == "com.github.mariohewardt.listent"' --last 1h
 
-# Check daemon logs
-listent logs --follow
+# Stream live daemon events
+log stream --predicate 'subsystem == "com.github.mariohewardt.listent"'
 
-# Uninstall daemon
-sudo listent uninstall-daemon
+# Stop daemon
+launchctl unload ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+
+# Restart daemon with new configuration
+launchctl unload ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+listent --daemon --launchd -e "new.pattern.*" --interval 2.0 > ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+launchctl load ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+
+# Remove daemon completely
+launchctl unload ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+rm ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+```
+
+### Example Configurations
+
+```bash
+# Monitor all processes with any network entitlements
+listent --daemon --launchd -e "*network*" --interval 1.0 > ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+
+# Monitor specific paths with specific entitlements
+listent --daemon --launchd /Applications /usr/bin -e "com.apple.security.*" --interval 2.0 > ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
+
+# Monitor with JSON output (useful for log parsing)
+listent --daemon --launchd -e "com.apple.*" --json > ~/Library/LaunchAgents/com.github.mariohewardt.listent.plist
 ```
 
 ## Verification and Testing

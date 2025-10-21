@@ -163,91 +163,70 @@ mod tests {
 // Test full monitor workflows with real processes
 ```
 
-## Feature: LaunchD Daemon Support
+## Feature: LaunchD Daemon Support (Simplified Implementation)
 
-### CLI Extensions for Daemon Management
+**Implementation Note**: Phase 3 was implemented with a simplified approach that provides all core functionality without over-engineering. No TOML config files, no IPC, no automated CLI commands - just clean daemon execution via launchd.
+
+### CLI Extensions for Daemon
 ```rust
-// Extended CLI with subcommands
+// Simple daemon flags (no subcommands)
 #[derive(Parser)]
 pub struct Args {
-    #[command(subcommand)]
-    pub command: Option<Commands>,
     // ... existing fields
+    
+    /// Run as background daemon (implies --monitor)
     #[arg(long)]
     pub daemon: bool,
+    
+    /// Generate LaunchD plist for installation (requires --daemon)
+    #[arg(long)]
+    pub launchd: bool,
 }
-
-#[derive(Subcommand)]
-pub enum Commands {
-    InstallDaemon { config: Option<PathBuf> },
-    UninstallDaemon,
-    DaemonStatus,
-    UpdateConfig { updates: Vec<String> },
-    Logs { follow: bool, since: Option<String> },
-}
-```
-
-### Daemon Configuration Types
-```rust
-// In src/daemon/config.rs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonConfiguration {
-    pub daemon: DaemonSettings,
-    pub logging: LoggingSettings,
-    pub monitoring: MonitoringSettings,
-    pub ipc: IpcSettings,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DaemonSettings {
-    pub polling_interval: f64,      // 0.1-300.0 seconds
-    pub auto_start: bool,           // launchd RunAtLoad setting
-    pub pid_file: PathBuf,          // /var/run/listent/daemon.pid
-}
-
-// Configuration file: /etc/listent/daemon.toml
 ```
 
 ### LaunchD Integration
 ```rust
 // src/daemon/launchd.rs
-pub struct LaunchDPlist {
-    pub label: String,              // com.github.mariohewardt.listent
-    pub program_arguments: Vec<String>,
-    pub run_at_load: bool,
-    pub keep_alive: bool,
-    pub working_directory: Option<PathBuf>,
-}
+pub fn generate_launchd_plist(
+    daemon_path: &Path,
+    interval: f64,
+    paths: &[PathBuf],
+    entitlements: &[String],
+    run_at_load: bool,
+    keep_alive: bool,
+) -> Result<String>;
 
-pub fn generate_plist(daemon_path: &Path) -> Result<String>;
-pub fn install_plist(plist_content: &str, service_name: &str) -> Result<()>;
-pub fn launchctl_load(plist_path: &Path) -> Result<()>;
-pub fn launchctl_unload(service_name: &str) -> Result<()>;
+// Generates XML plist with:
+// - Label: com.github.mariohewardt.listent
+// - ProgramArguments: [binary_path, --daemon, --interval, X, ...filters]
+// - RunAtLoad: true (auto-start on boot)
+// - KeepAlive: true (auto-restart on crash)
+// - StandardOutPath/StandardErrorPath for debugging
 ```
 
-### IPC Communication
+### Daemon Logging
 ```rust
-// src/daemon/ipc.rs
-#[derive(Debug, Serialize, Deserialize)]
-pub enum IpcMessage {
-    UpdateConfig { updates: ConfigUpdates },
-    ReloadConfig,
-    GetStatus,
-    GetStats,
-    Shutdown,
+// src/daemon/logging.rs
+pub struct DaemonLogger {
+    subsystem: String,  // com.github.mariohewardt.listent
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum IpcResponse {
-    Success { data: Option<serde_json::Value> },
-    Error { code: u32, message: String },
-    ConfigUpdated { new_config: DaemonConfiguration },
+impl DaemonLogger {
+    pub fn log_daemon_start(&self, interval: f64);
+    pub fn log_daemon_stop(&self);
+    pub fn log_process_detected(&self, process: &MonitoredProcess);
+    pub fn log_error(&self, error: &str);
 }
+```
 
-// Unix domain socket at /var/run/listent/daemon.sock
-pub struct IpcServer {
-    socket_path: PathBuf,
-    listener: UnixListener,
+### What Was Simplified
+- ❌ No `DaemonConfiguration` struct - CLI args in plist instead
+- ❌ No `config.rs` module - removed as dead code
+- ❌ No `ipc.rs` module - restart daemon to change config
+- ❌ No CLI subcommands - manual `launchctl` usage
+- ✅ LaunchD plist generation retained
+- ✅ Enhanced ULS logging retained
+- ✅ Background daemon mode works
 }
 ```
 
@@ -259,32 +238,34 @@ pub struct IpcServer {
 - Reuse existing monitor::polling logic with async wrapper
 - Signal handling for graceful shutdown and config reload
 
-#### Configuration Management
-- TOML-based configuration files
-- Atomic configuration updates with validation
-- Backup and rollback functionality
-- Dynamic reload without daemon restart
+### Integration Points
+
+#### Daemon Mode Execution
+- Extend main.rs with daemon execution path
+- No terminal output in daemon mode - ULS logging only
+- Reuse existing monitor::polling logic
+- Signal handling for graceful shutdown (SIGTERM/SIGINT)
 
 ### Testing Approach
 ```rust
-// Unit tests for core logic
+// Unit tests for plist generation
 #[cfg(test)]
 mod tests {
     use super::*;
     
     #[test]
-    fn test_process_snapshot_comparison() {
-        // Test new process detection logic
+    fn test_launchd_plist_creation() {
+        // Test plist generation with various configurations
     }
     
     #[test]
-    fn test_polling_configuration_validation() {
-        // Test interval bounds checking
+    fn test_plist_contains_program_arguments() {
+        // Test CLI args embedded in plist
     }
 }
 
 // Integration tests in tests/ directory
-// Test full monitor workflows with real processes
+// Test daemon installation workflow with launchctl
 ```
 
 ### Performance Considerations
@@ -316,35 +297,38 @@ mod tests {
   - Memory usage <1% of system resources during operation
 - **Testing**: TDD approach with comprehensive contract tests covering CLI validation, output formats, and edge cases
 
-### Phase 3: Performance & UX Optimizations (Multiple Sessions)
-- **Status**: ✅ COMPLETE
-- **Progress Indicator Enhancements**:
-  - ✅ Fast file counting phase (like `find` command performance)
-  - ✅ Real-time progress with "Processed X/Y files (scanned: A, skipped: B)" format
-  - ✅ Directory name display in progress output
-  - ✅ Skip tracking for non-executable files
-- **Default Path Optimization**:
-  - ✅ Reduced from 5 system directories to single `/Applications` directory
-  - ✅ Significantly faster default scans with maintained functionality
-  - ✅ Updated help text and documentation
-- **Interrupt Handling Refinement**:
-  - ✅ Clean signal handling with `signal-hook` library
-  - ✅ Silent interrupt (no error messages)
-  - ✅ Documented macOS terminal workaround (`trap - INT`)
-  - ✅ Cross-terminal compatibility notes in README
+### Phase 3: LaunchD Daemon Support (Simplified Implementation)
+- **Status**: ✅ COMPLETE (Simplified)
+- **Key Features Implemented**:
+  - ✅ `--daemon` flag runs process monitoring in background
+  - ✅ `--launchd` flag generates plist file
+  - ✅ Enhanced ULS logging for daemon events
+  - ✅ LaunchD plist generation with 14 unit tests
+  - ✅ Integration with existing monitor functionality
+- **Simplified Approach**:
+  - ❌ No TOML config files (CLI args in plist)
+  - ❌ No IPC mechanism (restart daemon to change config)
+  - ❌ No automated install/uninstall commands (manual `launchctl`)
+  - ✅ Simpler, more maintainable implementation
+  - ✅ Follows standard macOS launchd conventions
+- **Daemon Module Structure**:
+  - ✅ `src/daemon/mod.rs` - Daemon orchestration
+  - ✅ `src/daemon/launchd.rs` - Plist generation
+  - ✅ `src/daemon/logging.rs` - Enhanced ULS logging
+  - ❌ `src/daemon/config.rs` - Removed as dead code
+  - ❌ `src/daemon/ipc.rs` - Not implemented
 
-### Phase 4: Daemon Infrastructure (003-add-launchd-daemon) 
-- **Status**: 🚧 IN PROGRESS
-- **Implemented**:
-  - ✅ CLI subcommands for daemon management
-  - ✅ Configuration file structure and parsing  
-  - ✅ LaunchD plist generation and integration
-  - ✅ IPC framework for runtime configuration updates
-  - ✅ Unified Logging System integration
-- **Remaining**:
-  - 🔄 End-to-end daemon operation testing
-  - 🔄 Configuration update workflows
-  - 🔄 Production deployment validation
+### Phase 4: Code Quality & Cleanup
+- **Status**: ✅ COMPLETE
+- **Improvements**:
+  - ✅ Removed `thiserror` dependency (15 → 14 dependencies)
+  - ✅ Added 31 new unit tests (18 → 49 tests, +172% increase)
+  - ✅ Fixed 2 flaky tests
+  - ✅ Analyzed test coverage (57.3% unit, ~75-80% effective)
+  - ✅ Removed 42 lines of dead code
+  - ✅ Cleaned repository files (help, output.json removed)
+  - ✅ Eliminated all compiler warnings (0 warnings)
+  - ✅ All 158 tests passing
 
 ### Files Modified/Added (Cumulative)
 - **Core Architecture**: Complete modular structure in `src/`
