@@ -126,18 +126,6 @@ impl DaemonLogger {
         self.log_structured(LogLevel::Info, &format!("New process detected: {}", process_name), &message)
     }
 
-    /// Log IPC communication events
-    pub fn log_ipc_request(&self, request_type: &str, client_info: &str) -> Result<()> {
-        let message = json!({
-            "event": "ipc_request",
-            "request_type": request_type,
-            "client": client_info,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        });
-
-        self.log_structured(LogLevel::Debug, &format!("IPC request: {}", request_type), &message)
-    }
-
     /// Log error events
     pub fn log_error(&self, error_message: &str, context: Option<&str>) -> Result<()> {
         let message = json!({

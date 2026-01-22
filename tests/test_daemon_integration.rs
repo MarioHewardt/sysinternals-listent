@@ -32,11 +32,12 @@ fn test_daemon_pid_file_creation() {
     let config_content = format!(r#"
 [daemon]
 polling_interval = 1.0
-pid_file = "{}"
+auto_start = false
 
-[ipc]
-socket_path = "{}"
-"#, pid_file.display(), temp_dir.path().join("test.sock").display());
+[monitoring]
+path_filters = []
+entitlement_filters = []
+"#);
     
     std::fs::write(&config_path, config_content).unwrap();
     
@@ -81,8 +82,8 @@ level = "debug"
 }
 
 #[test]
-fn test_daemon_ipc_communication() {
-    // Test IPC communication between client and daemon
+fn test_daemon_status_command() {
+    // Test daemon status command
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test daemon status query (will fail until implemented)

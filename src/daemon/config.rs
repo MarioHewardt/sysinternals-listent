@@ -155,13 +155,7 @@ impl DaemonConfiguration {
 
     /// Create configuration directories if they don't exist
     pub fn ensure_directories(&self) -> Result<()> {
-        // Create socket directory (using hardcoded path)
-        let socket_path = std::path::PathBuf::from(crate::constants::IPC_SOCKET_PATH);
-        if let Some(socket_dir) = socket_path.parent() {
-            std::fs::create_dir_all(socket_dir)
-                .with_context(|| format!("Failed to create socket directory: {}", socket_dir.display()))?;
-        }
-
+        // No directories needed currently - config files are created on demand
         Ok(())
     }
 

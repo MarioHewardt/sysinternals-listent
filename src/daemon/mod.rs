@@ -2,12 +2,10 @@
 //!
 //! This module provides functionality to run listent as a macOS daemon:
 //! - Configuration management with atomic updates
-//! - Inter-process communication for runtime configuration changes
 //! - LaunchD integration for system service management
 //! - Enhanced Unified Logging System integration
 
 pub mod config;
-pub mod ipc;
 pub mod launchd;
 pub mod logging;
 
@@ -19,8 +17,7 @@ use tokio::sync::Mutex;
 use tokio::signal;
 use crate::models::{PollingConfiguration, ProcessSnapshot, MonitoredProcess};
 use crate::daemon::config::DaemonConfiguration;
-use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY, IPC_SOCKET_PATH};
-use crate::daemon::ipc::IpcServer;
+use crate::constants::{APP_SUBSYSTEM, DAEMON_CATEGORY};
 use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
 
@@ -82,8 +79,6 @@ pub struct DaemonState {
     process_tracker: Arc<Mutex<ProcessTracker>>,
     /// Daemon logger
     logger: DaemonLogger,
-    /// IPC server for runtime communication
-    ipc_server: Option<IpcServer>,
 }
 
 impl DaemonState {
@@ -101,14 +96,7 @@ impl DaemonState {
             config: Arc::new(Mutex::new(config)),
             process_tracker: Arc::new(Mutex::new(process_tracker)),
             logger,
-            ipc_server: None,
         })
-    }
-
-    /// Initialize IPC server
-    pub fn with_ipc_server(mut self, socket_path: PathBuf) -> Result<Self> {
-        self.ipc_server = Some(IpcServer::new(socket_path)?);
-        Ok(self)
     }
 
     /// Get current configuration
@@ -187,7 +175,6 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     if is_daemon_running() {
         println!("✅ listent daemon started successfully");
         println!("  Polling interval: {}s", config.daemon.polling_interval);
-        println!("  IPC socket: {}", IPC_SOCKET_PATH);
         println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
         println!("  Check status: listent daemon-status");
         println!("  Stop daemon: listent daemon-stop");
@@ -210,9 +197,7 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
     };
 
     // Create daemon state
-    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
-    let mut daemon_state = DaemonState::new(config.clone())?
-        .with_ipc_server(socket_path.clone())?;
+    let daemon_state = DaemonState::new(config.clone())?;
 
     // Log startup
     daemon_state.logger.log_startup(
@@ -222,22 +207,6 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
 
     // Setup signal handling for graceful shutdown
     let shutdown_signal = setup_signal_handlers();
-
-    // Start IPC server in background
-    let ipc_task = if let Some(ref mut _ipc_server) = daemon_state.ipc_server {
-        let mut server_clone = IpcServer::new(socket_path)?;
-        // Try to start the IPC server - if it fails, we should fail fast
-        server_clone.start().await.context("Failed to start IPC server")?;
-        
-        Some(tokio::spawn(async move {
-            // Server is already started, just keep it running
-            loop {
-                tokio::time::sleep(Duration::from_secs(1)).await;
-            }
-        }))
-    } else {
-        None
-    };
 
     // Main monitoring loop
     let monitoring_task = {
@@ -263,18 +232,6 @@ async fn run_daemon_process(config_path: Option<PathBuf>) -> Result<()> {
         _ = monitoring_task => {
             daemon_state.logger.log_shutdown("Monitoring loop ended")?;
         }
-        _ = async {
-            if let Some(task) = ipc_task {
-                task.await.ok();
-            }
-        } => {
-            daemon_state.logger.log_shutdown("IPC server ended")?;
-        }
-    }
-
-    // Cleanup
-    if let Some(ref mut ipc_server) = daemon_state.ipc_server {
-        ipc_server.stop()?;
     }
 
     Ok(())
@@ -373,18 +330,8 @@ pub fn initialize_daemon(config_path: Option<PathBuf>) -> Result<()> {
 
 /// Stop daemon gracefully
 pub fn stop_daemon() -> Result<()> {
-    // Use hardcoded socket path
-    let socket_path = PathBuf::from(IPC_SOCKET_PATH);
-    
-    // Remove socket file if it exists
-    if socket_path.exists() {
-        std::fs::remove_file(&socket_path)
-            .with_context(|| format!("Failed to remove daemon socket: {}", socket_path.display()))?;
-    }
-
-    // TODO: Send shutdown signal to running daemon via IPC
-    // For now, this is a basic cleanup function
-    
+    // Daemon is stopped via signal (SIGTERM) from the daemon-stop command
+    // No cleanup needed here
     Ok(())
 }
 
