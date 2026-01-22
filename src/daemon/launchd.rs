@@ -28,6 +28,10 @@ pub struct LaunchDPlist {
     pub standard_error_path: Option<PathBuf>,
     /// Environment variables
     pub environment_variables: Option<std::collections::HashMap<String, String>>,
+    /// User to run as (for system daemons)
+    pub user_name: Option<String>,
+    /// Group to run as (for system daemons)
+    pub group_name: Option<String>,
 }
 
 impl LaunchDPlist {
@@ -49,6 +53,8 @@ impl LaunchDPlist {
                 env.insert("PATH".to_string(), "/usr/bin:/bin:/usr/sbin:/sbin".to_string());
                 env
             }),
+            user_name: Some("root".to_string()),
+            group_name: Some("wheel".to_string()),
         }
     }
 
@@ -112,6 +118,16 @@ impl LaunchDPlist {
             }
         }
 
+        // User and group (for system daemons)
+        if let Some(ref user) = self.user_name {
+            plist.push_str("\t<key>UserName</key>\n");
+            plist.push_str(&format!("\t<string>{}</string>\n", user));
+        }
+        if let Some(ref group) = self.group_name {
+            plist.push_str("\t<key>GroupName</key>\n");
+            plist.push_str(&format!("\t<string>{}</string>\n", group));
+        }
+
         plist.push_str("</dict>\n");
         plist.push_str("</plist>\n");
 
@@ -131,37 +147,68 @@ impl LaunchDPlist {
         Ok(plist_path)
     }
 
-    /// Load service with launchctl
+    /// Load service with launchctl using modern bootstrap API
+    /// Falls back to legacy 'load' command if bootstrap fails
     pub fn launchctl_load(&self, plist_path: &Path) -> Result<()> {
+        // Try modern bootstrap API first (macOS 10.10+)
         let output = Command::new("launchctl")
+            .args(&["bootstrap", "system", plist_path.to_str().unwrap()])
+            .output()
+            .context("Failed to execute launchctl bootstrap")?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        // Fall back to legacy load command for older macOS versions
+        let legacy_output = Command::new("launchctl")
             .args(&["load", plist_path.to_str().unwrap()])
             .output()
             .context("Failed to execute launchctl load")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        if !legacy_output.status.success() {
+            let stderr = String::from_utf8_lossy(&legacy_output.stderr);
             anyhow::bail!("launchctl load failed: {}", stderr);
         }
 
         Ok(())
     }
 
-    /// Unload service with launchctl
+    /// Unload service with launchctl using modern bootout API
+    /// Falls back to legacy 'unload' command if bootout fails
     pub fn launchctl_unload(&self) -> Result<()> {
+        // Try modern bootout API first (macOS 10.10+)
+        // Format: launchctl bootout system/<service-label>
         let output = Command::new("launchctl")
-            .args(&["unload", &format!("/Library/LaunchDaemons/{}", LAUNCHD_PLIST_NAME)])
+            .args(&["bootout", &format!("system/{}", self.label)])
             .output()
-            .context("Failed to execute launchctl unload")?;
+            .context("Failed to execute launchctl bootout")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            // Don't fail if service was already unloaded
-            if !stderr.contains("Could not find specified service") {
-                anyhow::bail!("launchctl unload failed: {}", stderr);
-            }
+        if output.status.success() {
+            return Ok(());
         }
 
-        Ok(())
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        
+        // If service not found with bootout, try legacy unload
+        if stderr.contains("Could not find specified service") || stderr.contains("No such process") {
+            // Service might not be loaded, try legacy unload as fallback
+            let legacy_output = Command::new("launchctl")
+                .args(&["unload", &format!("/Library/LaunchDaemons/{}", LAUNCHD_PLIST_NAME)])
+                .output()
+                .context("Failed to execute launchctl unload")?;
+
+            if !legacy_output.status.success() {
+                let legacy_stderr = String::from_utf8_lossy(&legacy_output.stderr);
+                // Don't fail if service was already unloaded
+                if !legacy_stderr.contains("Could not find specified service") {
+                    anyhow::bail!("launchctl unload failed: {}", legacy_stderr);
+                }
+            }
+            return Ok(());
+        }
+
+        anyhow::bail!("launchctl bootout failed: {}", stderr);
     }
 
     /// Check if service is currently loaded
@@ -196,10 +243,10 @@ impl LaunchDPlist {
         if let Some(config) = config_path {
             plist.program_arguments = vec![
                 daemon_path.to_string_lossy().to_string(),
-                "--monitor".to_string(),
-                "--daemon".to_string(),
                 "--config".to_string(),
                 config.to_string_lossy().to_string(),
+                "--monitor".to_string(),
+                "--daemon".to_string(),
             ];
         }
 

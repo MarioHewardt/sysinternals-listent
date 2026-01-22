@@ -58,20 +58,20 @@ listent --monitor -e "com.apple.security.network.*"
 Run monitoring as a persistent system service:
 ```bash
 # Install and start daemon
-listent install-daemon
+sudo listent install-daemon
 
 # Check daemon status
 listent daemon-status
 
-# Update configuration without restart
-listent update-config --interval 2.0
-
 # View daemon logs
-listent logs --follow
+listent logs
+listent logs --since 1h
 
-# Stop and uninstall
+# Stop daemon process
 listent daemon-stop
-listent uninstall-daemon
+
+# Uninstall service
+sudo listent uninstall-daemon
 ```
 
 ## Examples
@@ -105,17 +105,21 @@ listent --daemon --monitor --config /etc/listent/daemon.toml
 
 ### Daemon Management
 ```bash
-# Install daemon with default monitoring
-listent install-daemon
+# Install daemon with default monitoring (requires sudo)
+sudo listent install-daemon
 
-# Update daemon to monitor specific entitlements
-listent update-config -e "com.apple.private.*"
+# Install with custom configuration file
+sudo listent install-daemon --config /path/to/config.toml
 
 # View recent daemon activity
-listent logs --since "1 hour ago"
+listent logs --since 1h
 
 # Check if daemon is running
 listent daemon-status
+
+# Stop and remove daemon
+listent daemon-stop
+sudo listent uninstall-daemon
 ```
 
 ## Installation
@@ -148,11 +152,14 @@ cargo build --release
 ## Configuration
 
 ### Command Line Options
-- **Paths**: Multiple paths can be specified: `listent /path1 /path2`
+- **Paths**: Multiple paths can be specified as positional arguments: `listent /path1 /path2`
 - **Entitlement filtering**: `-e "pattern"` supports exact matches and globs (`*`, `?`, `[]`)
-- **Output format**: `--json` for structured output, default is human-readable
-- **Monitoring**: `--monitor` enables real-time process monitoring
+- **Output format**: `--json` or `-j` for structured output, default is human-readable
+- **Quiet mode**: `--quiet` or `-q` suppresses warnings about unreadable files
+- **Monitoring**: `--monitor` or `-m` enables real-time process monitoring
+- **Monitor interval**: `--interval SECONDS` sets polling frequency (0.1-300.0, default: 1.0)
 - **Daemon mode**: `--daemon` runs as background service (requires `--monitor`)
+- **Config file**: `--config FILE` or `-c FILE` specifies daemon configuration path
 
 ### Entitlement Patterns
 ```bash
@@ -169,10 +176,19 @@ cargo build --release
 ```
 
 ### Daemon Configuration
-Daemon settings can be configured via:
-1. **Configuration file**: `/etc/listent/daemon.toml` or custom path with `--config`
-2. **Runtime updates**: `listent update-config` command
-3. **Command line**: Initial settings when starting daemon
+Daemon settings are configured via a TOML configuration file:
+- **Default location**: `~/.config/listent/daemon.toml`
+- **Custom path**: Use `--config` with `install-daemon`
+
+To change configuration, edit the config file and restart the daemon:
+```bash
+# Edit config
+nano ~/.config/listent/daemon.toml
+
+# Restart daemon
+listent daemon-stop
+sudo listent install-daemon
+```
 
 Example daemon configuration:
 ```toml
@@ -181,12 +197,13 @@ polling_interval = 1.0
 auto_start = true
 
 [monitoring]
+path_filters = []
 entitlement_filters = ["com.apple.security.*", "*network*"]
-output_json = false
 
 [logging]
 level = "info"
 subsystem = "com.github.mariohewardt.listent"
+category = "daemon"
 ```
 
 ## Troubleshooting

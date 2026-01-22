@@ -289,9 +289,6 @@ fn run_subcommand(command: cli::Commands) -> Result<()> {
         cli::Commands::DaemonStop => {
             stop_daemon_process()
         },
-        cli::Commands::UpdateConfig { updates } => {
-            update_daemon_config(updates)
-        },
         cli::Commands::Logs { follow, since, format } => {
             show_daemon_logs(follow, since, format)
         },
@@ -468,9 +465,34 @@ fn show_daemon_status() -> Result<()> {
 
 /// Stop running daemon process
 fn stop_daemon_process() -> Result<()> {
+    use crate::daemon::launchd::LaunchDPlist;
+    
     println!("🛑 Stopping listent daemon...");
 
-    // Find running daemon processes
+    // First, check if daemon is running as LaunchD service
+    let current_exe = std::env::current_exe()
+        .context("Could not determine current executable path")?;
+    let plist = LaunchDPlist::new(&current_exe);
+    
+    // Check if LaunchD service exists
+    let service_loaded = plist.is_service_loaded().unwrap_or(false);
+    
+    if service_loaded {
+        // If running under LaunchD, we need to unload it (KeepAlive will restart if we just kill)
+        println!("📋 Detected LaunchD service, stopping...");
+        println!("⚠️  Note: Service will remain installed. To restart: sudo launchctl bootstrap system /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist");
+        println!("   To permanently remove: sudo listent uninstall-daemon");
+        
+        if let Err(e) = plist.launchctl_unload() {
+            println!("⚠️  Failed to stop LaunchD service: {}", e);
+            println!("   Attempting to kill process directly...");
+        } else {
+            println!("✅ Daemon stopped successfully");
+            return Ok(());
+        }
+    }
+
+    // If not a LaunchD service (or unload failed), kill the process directly
     let output = std::process::Command::new("pgrep")
         .args(["-f", "listent"])
         .output()
@@ -564,40 +586,6 @@ fn stop_daemon_process() -> Result<()> {
         }
         println!("✅ Daemon stopped (forced)");
     }
-
-    Ok(())
-}
-
-/// Update daemon configuration at runtime
-fn update_daemon_config(updates: Vec<String>) -> Result<()> {
-    use crate::daemon::config::DaemonConfiguration;
-
-    println!("⚙️  Updating daemon configuration...");
-
-    // Parse configuration updates
-    let parsed_updates = cli::parse_config_updates(&updates)?;
-    println!("📝 Applying {} configuration updates", parsed_updates.len());
-
-    // Load current configuration
-    let config_path = DaemonConfiguration::user_config_path()?;
-    let mut config = if config_path.exists() {
-        DaemonConfiguration::load_from_file(&config_path)?
-    } else {
-        anyhow::bail!("Configuration file not found: {}. Install daemon first.", config_path.display());
-    };
-
-    // Apply updates atomically
-    config.apply_updates(&parsed_updates)?;
-
-    // Save updated configuration
-    config.save_to_file(&config_path)?;
-
-    println!("✅ Configuration updated successfully!");
-    for (key, value) in &parsed_updates {
-        println!("   {}: {}", key, value);
-    }
-    println!("   Saved to: {}", config_path.display());
-    println!("   Note: Restart daemon service for changes to take effect");
 
     Ok(())
 }

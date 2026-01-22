@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 use anyhow::Result;
 
@@ -31,12 +31,14 @@ fn test_monitor_mode_basic_functionality() -> Result<()> {
 fn test_monitor_mode_detects_new_processes() -> Result<()> {
     let test_env = TestEnvironment::new()?;
     
-    // Start monitor in background
+    // Start monitor in background with piped output
     let mut monitor_child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
         .arg("0.5") // Fast polling for quick test
         .arg("--json")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
     
     // Give monitor time to start and establish baseline
@@ -73,7 +75,7 @@ fn test_monitor_mode_detects_new_processes() -> Result<()> {
 fn test_monitor_mode_entitlement_filtering() -> Result<()> {
     let test_env = TestEnvironment::new()?;
     
-    // Start monitor with specific entitlement filter
+    // Start monitor with specific entitlement filter and piped output
     let mut monitor_child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
@@ -81,6 +83,8 @@ fn test_monitor_mode_entitlement_filtering() -> Result<()> {
         .arg("-e")
         .arg("com.apple.security.network.client")
         .arg("--json")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()?;
     
     // Give monitor time to start

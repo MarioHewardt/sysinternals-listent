@@ -1,4 +1,4 @@
-use std::process::{Command, Child};
+use std::process::{Command, Child, Stdio};
 use std::time::{Duration, Instant};
 use std::sync::mpsc;
 use std::thread;
@@ -26,6 +26,9 @@ impl ReliableTestRunner {
     /// Run a command with automatic timeout and cleanup
     pub fn run_command_with_timeout(&mut self, mut cmd: Command) -> Result<TestOutput> {
         let start = Instant::now();
+        // Capture stdout and stderr
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
         let mut child = cmd.spawn()?;
         
         // Register for cleanup
@@ -43,20 +46,18 @@ impl ReliableTestRunner {
         });
         
         // Wait for either completion or timeout
-        let result = match child.try_wait() {
-            Ok(Some(status)) => {
+        match child.try_wait() {
+            Ok(Some(_status)) => {
                 // Process already finished
                 let output = child.wait_with_output()?;
-                TestOutput::from_output(output, start.elapsed())
+                Ok(TestOutput::from_output(output, start.elapsed()))
             },
             Ok(None) => {
                 // Process still running, wait with timeout
-                self.wait_with_timeout(child, rx, timeout)?
+                self.wait_with_timeout(child, rx, timeout)
             },
-            Err(e) => return Err(anyhow::anyhow!("Failed to check child process: {}", e)),
-        };
-        
-        Ok(result)
+            Err(e) => Err(anyhow::anyhow!("Failed to check child process: {}", e)),
+        }
     }
     
     /// Run listent in monitor mode with controlled interruption
@@ -68,6 +69,9 @@ impl ReliableTestRunner {
         for arg in args {
             cmd.arg(arg);
         }
+        // Capture stdout and stderr
+        cmd.stdout(Stdio::piped());
+        cmd.stderr(Stdio::piped());
         
         let mut child = cmd.spawn()?;
         self.cleanup_handles.push(CleanupHandle::Process(child.id()));
@@ -99,9 +103,8 @@ impl ReliableTestRunner {
         loop {
             match child.try_wait() {
                 Ok(Some(_status)) => {
-                    // Process finished
-                    let output = child.wait_with_output()?;
-                    return Ok(TestOutput::from_output(output, start.elapsed()));
+                    // Process finished, get output
+                    break;
                 },
                 Ok(None) => {
                     // Still running, check timeout
@@ -117,6 +120,10 @@ impl ReliableTestRunner {
                 Err(e) => return Err(anyhow::anyhow!("Error waiting for child: {}", e)),
             }
         }
+        
+        // Process finished, collect output
+        let output = child.wait_with_output()?;
+        Ok(TestOutput::from_output(output, start.elapsed()))
     }
     
     /// Send SIGINT to a process
@@ -310,9 +317,9 @@ mod tests {
         let mut runner = ReliableTestRunner::new(2); // 2 second timeout
         
         // Run a command that should timeout (sleep longer than timeout)
-        let result = runner.run_command_with_timeout(
-            Command::new("sleep").arg("10")
-        )?;
+        let mut cmd = Command::new("sleep");
+        cmd.arg("10");
+        let result = runner.run_command_with_timeout(cmd)?;
         
         assert!(result.timed_out, "Should have timed out");
         assert!(result.duration >= Duration::from_secs(2), "Should respect timeout");
@@ -324,9 +331,9 @@ mod tests {
     fn test_reliable_runner_success() -> Result<()> {
         let mut runner = ReliableTestRunner::new(5);
         
-        let result = runner.run_command_with_timeout(
-            Command::new("echo").arg("hello")
-        )?;
+        let mut cmd = Command::new("echo");
+        cmd.arg("hello");
+        let result = runner.run_command_with_timeout(cmd)?;
         
         assert!(!result.timed_out, "Should not timeout");
         assert!(result.was_successful(), "Should succeed");

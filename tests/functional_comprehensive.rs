@@ -13,11 +13,10 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
     let mut runner = ReliableTestRunner::new(30); // 30 second timeout
     
     // Test basic scan
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("--json")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path())
+        .arg("--json");
+    let result = runner.run_command_with_timeout(cmd)?;
     
     assert!(result.was_successful(), "Basic scan should succeed");
     
@@ -27,13 +26,12 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
     assert!(json.get("summary").is_some(), "Should have summary field");
     
     // Test with entitlement filter
-    let filtered_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("-e")
-            .arg("com.apple.security.network.*")
-            .arg("--json")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path())
+        .arg("-e")
+        .arg("com.apple.security.network.*")
+        .arg("--json");
+    let filtered_result = runner.run_command_with_timeout(cmd)?;
     
     assert!(filtered_result.was_successful(), "Filtered scan should succeed");
     
@@ -118,22 +116,20 @@ fn test_error_handling_and_edge_cases() -> Result<()> {
     let mut runner = ReliableTestRunner::new(10);
     
     // Test nonexistent path
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("/nonexistent/path/that/should/not/exist")
-            .arg("--quiet")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg("/nonexistent/path/that/should/not/exist")
+        .arg("--quiet");
+    let result = runner.run_command_with_timeout(cmd)?;
     
     // Should handle gracefully (exact behavior may vary)
     assert!(result.exit_code.is_some(), "Should exit with status code");
     
     // Test invalid interval
-    let invalid_interval_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("--monitor")
-            .arg("--interval")
-            .arg("-1.0") // Invalid negative interval
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg("--monitor")
+        .arg("--interval")
+        .arg("-1.0"); // Invalid negative interval
+    let invalid_interval_result = runner.run_command_with_timeout(cmd)?;
     
     // Should reject invalid interval
     assert!(invalid_interval_result.exit_code != Some(0) || 
@@ -150,10 +146,9 @@ fn test_output_format_consistency() -> Result<()> {
     let mut runner = ReliableTestRunner::new(15);
     
     // Test human-readable output
-    let human_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path());
+    let human_result = runner.run_command_with_timeout(cmd)?;
     
     assert!(human_result.was_successful(), "Human output should work");
     assert!(human_result.contains_stdout("Found") || 
@@ -162,11 +157,10 @@ fn test_output_format_consistency() -> Result<()> {
         "Should contain human-readable indicators");
     
     // Test JSON output
-    let json_result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg(test_env.path())
-            .arg("--json")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path())
+        .arg("--json");
+    let json_result = runner.run_command_with_timeout(cmd)?;
     
     assert!(json_result.was_successful(), "JSON output should work");
     
@@ -179,20 +173,20 @@ fn test_output_format_consistency() -> Result<()> {
 
 #[test]
 fn test_performance_and_timeout_handling() -> Result<()> {
-    let mut runner = ReliableTestRunner::new(20);
+    let test_env = TestEnvironment::new()?;
+    let mut runner = ReliableTestRunner::new(30);
     
-    // Test that scan doesn't hang indefinitely
+    // Test that scan doesn't hang indefinitely - use test environment for predictable timing
     let start = std::time::Instant::now();
-    let result = runner.run_command_with_timeout(
-        std::process::Command::new("./target/release/listent")
-            .arg("/Applications") // Real directory that should complete
-            .arg("--quiet")
-    )?;
+    let mut cmd = std::process::Command::new("./target/release/listent");
+    cmd.arg(test_env.path()) // Use test directory for more predictable timing
+        .arg("--quiet");
+    let result = runner.run_command_with_timeout(cmd)?;
     let duration = start.elapsed();
     
-    // Should complete within reasonable time
-    assert!(duration < Duration::from_secs(15), 
-        "Scan should complete within 15 seconds");
+    // Should complete within reasonable time (test directory should be very fast)
+    assert!(duration < Duration::from_secs(10), 
+        "Scan should complete within 10 seconds, took {:?}", duration);
     
     // Should not timeout
     assert!(!result.timed_out, "Scan should not timeout");
@@ -217,12 +211,11 @@ fn test_concurrent_operations() -> Result<()> {
         
         let handle = thread::spawn(move || -> Result<()> {
             let mut runner = ReliableTestRunner::new(10);
-            let result = runner.run_command_with_timeout(
-                std::process::Command::new("./target/release/listent")
-                    .arg(&test_path)
-                    .arg("--json")
-                    .arg("--quiet")
-            )?;
+            let mut cmd = std::process::Command::new("./target/release/listent");
+            cmd.arg(&test_path)
+                .arg("--json")
+                .arg("--quiet");
+            let result = runner.run_command_with_timeout(cmd)?;
             
             if result.was_successful() {
                 success_counter.fetch_add(1, Ordering::SeqCst);

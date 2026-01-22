@@ -125,12 +125,13 @@ pub async fn run_daemon_mode() -> Result<()> {
 
 /// Run daemon with specific configuration path
 pub async fn run_daemon_with_config(config_path: Option<PathBuf>) -> Result<()> {
-    // Check if we're already running as the daemon child process
-    if std::env::var("LISTENT_DAEMON_CHILD").is_ok() {
-        // We're the child process - run the daemon directly
+    // Check if we're running under LaunchD (no need to fork - LaunchD manages us)
+    if std::env::var("XPC_SERVICE_NAME").is_ok() || 
+       std::env::var("LISTENT_DAEMON_CHILD").is_ok() {
+        // We're already managed by LaunchD or we're the child process - run directly
         run_daemon_process(config_path).await
     } else {
-        // We're the parent - spawn child and exit
+        // We're being run manually - spawn child and exit parent
         spawn_daemon_child(config_path).await
     }
 }

@@ -102,36 +102,3 @@ fn test_default_configuration_generation() {
            predicate::str::contains("Failed to write plist file")
        ));
 }
-
-#[test]
-fn test_configuration_update_validation() {
-    // Test configuration updates with invalid values
-    let mut cmd = Command::cargo_bin("listent").unwrap();
-    
-    // Test invalid polling interval update
-    cmd.args(&["update-config", "daemon.polling_interval=0.05"])
-       .assert()
-       .failure()
-       .stderr(predicate::str::contains("polling_interval").or(
-           predicate::str::contains("not yet implemented")
-       ));
-}
-
-#[test]
-fn test_configuration_atomic_updates() {
-    // Test that configuration updates are atomic (all or nothing)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
-    
-    // Mix of valid and invalid updates should fail entirely
-    cmd.args(&[
-        "update-config", 
-        "daemon.polling_interval=2.0",  // Valid
-        "daemon.invalid_field=value",   // Invalid field
-        "logging.level=debug"           // Valid
-    ])
-    .assert()
-    .failure()
-    .stderr(predicate::str::contains("invalid_field").or(
-        predicate::str::contains("not yet implemented")
-    ));
-}

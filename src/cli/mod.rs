@@ -107,11 +107,6 @@ pub enum Commands {
     DaemonStatus,
     /// Stop running daemon process
     DaemonStop,
-    /// Update daemon configuration at runtime
-    UpdateConfig {
-        /// Configuration updates in key=value format
-        updates: Vec<String>,
-    },
     /// View daemon logs
     Logs {
         /// Follow log output continuously
@@ -270,21 +265,6 @@ pub enum ExecutionMode {
     Monitor,
     Daemon,
     Subcommand(Commands),
-}
-
-/// Parse configuration updates from command line arguments
-pub fn parse_config_updates(updates: &[String]) -> Result<Vec<(String, String)>> {
-    let mut parsed_updates = Vec::new();
-    
-    for update in updates {
-        if let Some((key, value)) = update.split_once('=') {
-            parsed_updates.push((key.to_string(), value.to_string()));
-        } else {
-            return Err(anyhow!("Invalid update format: '{}'. Expected format: key=value", update));
-        }
-    }
-    
-    Ok(parsed_updates)
 }
 
 /// Validate time format for log filtering
