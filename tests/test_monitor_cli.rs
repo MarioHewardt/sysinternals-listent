@@ -62,5 +62,7 @@ fn test_monitor_with_invalid_arguments() {
     cmd.args(&["--interval", "5.0"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--interval requires --monitor"));
+        .stderr(predicate::str::contains("--interval requires --monitor").or(
+           predicate::str::contains("--interval requires --monitor or --daemon")
+       ));
 }

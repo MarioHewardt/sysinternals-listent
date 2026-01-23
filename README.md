@@ -100,7 +100,7 @@ listent --monitor --interval 2.0
 listent --monitor -e "com.apple.security.*"
 
 # Run as daemon with custom config
-listent --daemon --monitor --config /etc/listent/daemon.toml
+listent --daemon --config /etc/listent/daemon.toml
 ```
 
 ### Daemon Management

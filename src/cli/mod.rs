@@ -32,7 +32,7 @@ OPERATING MODES:
      Usage: listent --monitor [--interval SECONDS] [PATH...] [--entitlement KEY]
      
   3. Background Daemon Mode        - Run monitoring as persistent daemon
-     Usage: listent --daemon --monitor [--config FILE]
+     Usage: listent --daemon [--config FILE]
      Management: listent {install-daemon|daemon-status|daemon-stop}
 
 ENTITLEMENT FILTERING EXAMPLES:
@@ -82,7 +82,7 @@ pub struct Args {
     pub interval: f64,
 
     // === DAEMON MODE ===
-    /// Run as background daemon (requires --monitor)
+    /// Run as background daemon (automatically enables monitoring)
     #[arg(long, help_heading = "Daemon")]
     pub daemon: bool,
 
@@ -125,14 +125,14 @@ pub enum Commands {
 pub fn parse_args() -> Result<ScanConfig> {
     let args = Args::parse();
     
-    // Validate that --interval requires --monitor
-    if args.interval != 1.0 && !args.monitor {
-        return Err(anyhow!("--interval requires --monitor"));
+    // Validate that --interval requires --monitor or --daemon
+    if args.interval != 1.0 && !args.monitor && !args.daemon {
+        return Err(anyhow!("--interval requires --monitor or --daemon"));
     }
 
-    // If monitor mode is enabled, this function shouldn't be called
-    if args.monitor {
-        return Err(anyhow!("Internal error: parse_args() called in monitor mode"));
+    // If monitor or daemon mode is enabled, this function shouldn't be called
+    if args.monitor || args.daemon {
+        return Err(anyhow!("Internal error: parse_args() called in monitor/daemon mode"));
     }
 
     // Validate paths if provided
@@ -214,14 +214,9 @@ pub fn parse_args_raw() -> Result<Args> {
 
 /// Validate CLI arguments for compatibility
 fn validate_args_compatibility(args: &Args) -> Result<()> {
-    // Daemon mode requires monitor mode
-    if args.daemon && !args.monitor {
-        return Err(anyhow!("--daemon requires --monitor flag"));
-    }
-
-    // Interval validation 
-    if args.interval != 1.0 && !args.monitor {
-        return Err(anyhow!("--interval requires --monitor flag"));
+    // Interval validation (only matters when not in daemon mode, which auto-enables monitor)
+    if args.interval != 1.0 && !args.monitor && !args.daemon {
+        return Err(anyhow!("--interval requires --monitor or --daemon flag"));
     }
 
     if args.interval < 0.1 || args.interval > 300.0 {
@@ -241,7 +236,7 @@ pub fn get_execution_mode() -> Result<ExecutionMode> {
     match args.command {
         Some(command) => Ok(ExecutionMode::Subcommand(command.clone())),
         None => {
-            if args.daemon && args.monitor {
+            if args.daemon {
                 Ok(ExecutionMode::Daemon)
             } else if args.monitor {
                 Ok(ExecutionMode::Monitor)

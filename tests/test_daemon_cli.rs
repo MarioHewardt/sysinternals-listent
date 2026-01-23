@@ -94,11 +94,12 @@ fn test_logs_with_since() {
 fn test_daemon_flag_compatibility() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test that --daemon flag is incompatible with subcommands
-    cmd.args(&["--daemon", "install-daemon"])
+    // Test that --daemon flag works (implies --monitor)
+    // The daemon will start running and be interrupted by our timeout
+    cmd.args(&["--daemon"])
+       .timeout(std::time::Duration::from_secs(2))
        .assert()
-       .failure() // Should fail due to --daemon requiring --monitor
-       .stderr(predicate::str::contains("--daemon requires --monitor"));
+       .interrupted(); // Daemon starts successfully and runs until timeout
 }
 
 #[test]

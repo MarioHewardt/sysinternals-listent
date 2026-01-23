@@ -10,15 +10,15 @@ use tempfile::tempdir;
 
 #[test]
 fn test_daemon_startup_process() {
-    // Test that daemon can start in background mode
+    // Test that daemon can start in background mode (--daemon implies --monitor)
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // --daemon requires --monitor flag
+    // --daemon should work without --monitor (monitor is implied)
+    // The daemon will start and run until timeout
     cmd.args(&["--daemon"])
-       .timeout(Duration::from_secs(5))
+       .timeout(Duration::from_secs(2))
        .assert()
-       .failure()
-       .stderr(predicate::str::contains("--daemon requires --monitor"));
+       .interrupted(); // Daemon starts successfully and runs until timeout
 }
 
 #[test]

@@ -10,13 +10,14 @@ use tempfile::tempdir;
 
 #[test]
 fn test_daemon_startup_logging() {
-    // Test that daemon startup requires --monitor flag
+    // Test that daemon startup works (--daemon implies --monitor)
+    // The daemon will start and run until timeout
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     cmd.args(&["--daemon"])
+       .timeout(std::time::Duration::from_secs(2))
        .assert()
-       .failure()
-       .stderr(predicate::str::contains("--daemon requires --monitor"));
+       .interrupted(); // Daemon starts successfully and runs until timeout
 }
 
 #[test]
@@ -140,11 +141,12 @@ fn test_daemon_log_structured_format() {
 
 #[test]
 fn test_daemon_no_terminal_output() {
-    // Test that daemon mode requires --monitor flag
+    // Test that daemon mode works without explicit --monitor (it's implied)
+    // The daemon will start and run until timeout
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     cmd.args(&["--daemon"])
+       .timeout(std::time::Duration::from_secs(2))
        .assert()
-       .failure()
-       .stderr(predicate::str::contains("--daemon requires --monitor"));
+       .interrupted(); // Daemon starts successfully and runs until timeout
 }
