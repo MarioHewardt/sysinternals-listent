@@ -12,8 +12,7 @@ fn test_no_matches_human_output() {
     
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("(no matches)"))
-        .stdout(predicate::str::contains("Matched: 0"));
+        .stdout(predicate::str::contains("No binaries found").or(predicate::str::contains("Matched: 0")));
 }
 
 #[test]

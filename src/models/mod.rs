@@ -110,34 +110,12 @@ pub struct PollingConfiguration {
 pub struct ProcessSnapshot {
     /// HashMap of PID -> MonitoredProcess for O(1) lookups
     pub processes: HashMap<u32, MonitoredProcess>,
-    /// Timestamp of this snapshot
+    /// Timestamp of this snapshot (used for logging)
+    #[allow(dead_code)]
     pub timestamp: SystemTime,
-    /// Duration taken to create this snapshot
+    /// Duration taken to create this snapshot (used for performance tracking)
+    #[allow(dead_code)]
     pub scan_duration: Duration,
-}
-
-/// Represents an entitlement match for filtering
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EntitlementMatch {
-    /// The entitlement key that matched
-    pub key: String,
-    /// The full entitlement key (may include wildcards)
-    pub pattern: String,
-    /// Whether this was an exact match or pattern match
-    pub exact_match: bool,
-}
-
-/// Log entry for Unified Logging output
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LogEntry {
-    /// Log level
-    pub level: String,
-    /// Log message
-    pub message: String,
-    /// Timestamp of the log entry
-    pub timestamp: SystemTime,
-    /// Process context (optional)
-    pub process_context: Option<MonitoredProcess>,
 }
 
 /// Custom error types for monitoring operations
@@ -145,12 +123,6 @@ pub struct LogEntry {
 pub enum MonitorError {
     #[error("Invalid polling interval: {0}. Must be between 0.1 and 300.0 seconds")]
     InvalidInterval(f64),
-    #[error("Process access denied: {0}")]
-    PermissionDenied(String),
-    #[error("System resource error: {0}")]
-    SystemError(String),
-    #[error("Process not found: {0}")]
-    ProcessNotFound(u32),
 }
 
 impl ProcessSnapshot {
@@ -161,27 +133,5 @@ impl ProcessSnapshot {
             .filter(|process| !previous.processes.contains_key(&process.pid))
             .cloned()
             .collect()
-    }
-}
-
-impl PollingConfiguration {
-    /// Validates the polling configuration
-    pub fn validate(&self) -> Result<(), MonitorError> {
-        let interval_secs = self.interval.as_secs_f64();
-        if interval_secs < 0.1 || interval_secs > 300.0 {
-            return Err(MonitorError::InvalidInterval(interval_secs));
-        }
-        Ok(())
-    }
-    
-    /// Creates a default polling configuration
-    pub fn default_monitor() -> Self {
-        Self {
-            interval: Duration::from_secs(1),
-            path_filters: vec![],
-            entitlement_filters: vec![],
-            output_json: false,
-            quiet_mode: false,
-        }
     }
 }

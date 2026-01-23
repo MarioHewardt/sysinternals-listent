@@ -102,7 +102,7 @@ fn test_static_scan_interrupt_handling() -> Result<()> {
     let start = std::time::Instant::now();
     
     // Start scan process
-    let mut child = Command::new("./target/release/listent")
+    let child = Command::new("./target/release/listent")
         .arg(test_env.path())
         .arg("--quiet") // Reduce output noise
         .spawn()?;
@@ -111,8 +111,9 @@ fn test_static_scan_interrupt_handling() -> Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(500));
     
     // Send SIGINT
+    let pid = child.id() as i32;
     unsafe {
-        libc::kill(child.id() as i32, libc::SIGINT);
+        libc::kill(pid, libc::SIGINT);
     }
     
     // Wait for it to exit

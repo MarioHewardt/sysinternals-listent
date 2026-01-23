@@ -9,10 +9,9 @@ _JCD was vibe coded by Mark Russinovich, Mario Hewardt with Github Copilot Agent
    ```
 2. **Build Package**:
 
-   Set the VERSION environment variable to the version of listent.
-
-   ```
-   ./makePackages.sh . target/release listent $(VERSION) 0 brew ""
+   ```bash
+   # Replace 1.0.0 with the actual version from Cargo.toml
+   ./makePackages.sh . target/release listent 1.0.0 0 brew ""
    ```
 
 ## Test

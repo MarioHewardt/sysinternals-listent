@@ -207,12 +207,6 @@ pub fn parse_monitor_config() -> Result<PollingConfiguration> {
     })
 }
 
-/// Check if monitor mode is enabled from CLI args
-pub fn is_monitor_mode() -> bool {
-    let args = Args::parse();
-    args.monitor
-}
-
 /// Parse raw command line arguments without processing
 pub fn parse_args_raw() -> Result<Args> {
     Ok(Args::parse())

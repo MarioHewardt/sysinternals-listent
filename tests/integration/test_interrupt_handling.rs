@@ -1,10 +1,6 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 
 #[test]
 fn test_interrupt_handling_basic() {

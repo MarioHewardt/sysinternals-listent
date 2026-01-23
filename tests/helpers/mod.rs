@@ -1,3 +1,7 @@
+//! Test helpers for listent functional tests
+//!
+//! Provides controlled test environment and utilities
+
 use std::process::Command;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -13,8 +17,11 @@ pub struct TestEnvironment {
 
 #[derive(Debug, Clone)]
 pub struct TestBinary {
+    #[allow(dead_code)]
     pub name: String,
+    #[allow(dead_code)]
     pub path: PathBuf,
+    #[allow(dead_code)]
     pub expected_entitlements: Vec<String>,
 }
 
@@ -163,6 +170,7 @@ print("Test binary exiting")
     }
     
     /// Spawn a test process that will run for the specified duration
+    #[allow(dead_code)]
     pub fn spawn_test_process(&self, binary_name: &str, duration_seconds: f64) -> anyhow::Result<std::process::Child> {
         let binary = self.test_binaries.iter()
             .find(|b| b.name == binary_name)
@@ -174,47 +182,76 @@ print("Test binary exiting")
             
         Ok(child)
     }
-    
-    /// Get expected entitlements for a test binary
-    pub fn get_expected_entitlements(&self, binary_name: &str) -> Option<&Vec<String>> {
-        self.test_binaries.iter()
-            .find(|b| b.name == binary_name)
-            .map(|b| &b.expected_entitlements)
-    }
 }
 
 /// Test runner with timeout and cleanup
 pub struct TestRunner {
+    #[allow(dead_code)]
     timeout_seconds: u64,
 }
 
 impl TestRunner {
+    #[allow(dead_code)]
     pub fn new(timeout_seconds: u64) -> Self {
         Self { timeout_seconds }
     }
     
     /// Run listent scan mode and capture output
+    #[allow(dead_code)]
     pub fn run_scan(&self, args: &[&str]) -> anyhow::Result<TestResult> {
-        let start = std::time::Instant::now();
+        use std::process::Stdio;
+        use std::thread;
+        use std::time::{Duration, Instant};
+        
+        let start = Instant::now();
         
         let mut cmd = Command::new("./target/release/listent");
         for arg in args {
             cmd.arg(arg);
         }
         
-        let output = cmd
-            .timeout(std::time::Duration::from_secs(self.timeout_seconds))
-            .output()?;
-            
-        Ok(TestResult {
-            exit_code: output.status.code(),
-            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-            duration: start.elapsed(),
-        })
+        let mut child = cmd
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        
+        let timeout = Duration::from_secs(self.timeout_seconds);
+        let poll_interval = Duration::from_millis(100);
+        
+        // Poll for completion within timeout
+        loop {
+            match child.try_wait() {
+                Ok(Some(_status)) => {
+                    // Process completed
+                    let output = child.wait_with_output()?;
+                    return Ok(TestResult {
+                        exit_code: output.status.code(),
+                        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                        duration: start.elapsed(),
+                    });
+                }
+                Ok(None) => {
+                    // Still running, check timeout
+                    if start.elapsed() >= timeout {
+                        let _ = child.kill();
+                        let output = child.wait_with_output()?;
+                        return Ok(TestResult {
+                            exit_code: None, // Killed
+                            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+                            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+                            duration: start.elapsed(),
+                        });
+                    }
+                    thread::sleep(poll_interval);
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
     
     /// Run listent monitor mode and test CTRL-C
+    #[allow(dead_code)]
     pub fn run_monitor_with_interrupt(&self, args: &[&str], interrupt_after_seconds: f64) -> anyhow::Result<TestResult> {
         use std::process::Stdio;
         use std::time::Duration;
@@ -227,7 +264,7 @@ impl TestRunner {
             cmd.arg(arg);
         }
         
-        let mut child = cmd
+        let child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
@@ -241,13 +278,13 @@ impl TestRunner {
         }
         
         // Wait for process to exit (with timeout)
-        let timeout = Duration::from_secs(5); // Give it 5 seconds to exit gracefully
-        let result = wait_for_child_with_timeout(child, timeout)?;
+        let result = child.wait_with_output()?;
         
         Ok(TestResult {
             exit_code: result.status.code(),
             stdout: String::from_utf8_lossy(&result.stdout).to_string(),
             stderr: String::from_utf8_lossy(&result.stderr).to_string(),
+            #[allow(dead_code)]
             duration: start.elapsed(),
         })
     }
@@ -257,43 +294,25 @@ impl TestRunner {
 pub struct TestResult {
     pub exit_code: Option<i32>,
     pub stdout: String,
+    #[allow(dead_code)]
     pub stderr: String,
+    #[allow(dead_code)]
     pub duration: std::time::Duration,
 }
 
 impl TestResult {
+    #[allow(dead_code)]
     pub fn was_successful(&self) -> bool {
         self.exit_code == Some(0)
     }
     
+    #[allow(dead_code)]
     pub fn contains_stdout(&self, text: &str) -> bool {
         self.stdout.contains(text)
     }
     
+    #[allow(dead_code)]
     pub fn contains_stderr(&self, text: &str) -> bool {
         self.stderr.contains(text)
-    }
-}
-
-/// Wait for a child process with timeout
-fn wait_for_child_with_timeout(mut child: std::process::Child, _timeout: std::time::Duration) -> anyhow::Result<std::process::Output> {
-    // Simplified version - just wait for output
-    // In production, you'd implement actual timeout handling
-    match child.wait_with_output() {
-        Ok(output) => Ok(output),
-        Err(e) => Err(anyhow::anyhow!("Failed to wait for child process: {}", e))
-    }
-}
-
-// Extension trait to add timeout to Command
-trait CommandTimeout {
-    fn timeout(&mut self, duration: std::time::Duration) -> &mut Self;
-}
-
-impl CommandTimeout for Command {
-    fn timeout(&mut self, _duration: std::time::Duration) -> &mut Self {
-        // This is a placeholder - for full implementation you'd want
-        // to use a crate like `tokio` or implement custom timeout logic
-        self
     }
 }

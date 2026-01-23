@@ -7,7 +7,7 @@ use helpers::{TestEnvironment, TestRunner};
 
 #[test]
 fn test_monitor_mode_basic_functionality() -> Result<()> {
-    let test_env = TestEnvironment::new()?;
+    let _test_env = TestEnvironment::new()?;
     let runner = TestRunner::new(15);
     
     // Start monitor mode and interrupt after 3 seconds
@@ -32,7 +32,7 @@ fn test_monitor_mode_detects_new_processes() -> Result<()> {
     let test_env = TestEnvironment::new()?;
     
     // Start monitor in background with piped output
-    let mut monitor_child = Command::new("./target/release/listent")
+    let monitor_child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
         .arg("0.5") // Fast polling for quick test
@@ -55,15 +55,15 @@ fn test_monitor_mode_detects_new_processes() -> Result<()> {
     let _ = test_process.wait();
     
     // Stop monitor
+    let pid = monitor_child.id() as i32;
     unsafe {
-        libc::kill(monitor_child.id() as i32, libc::SIGINT);
+        libc::kill(pid, libc::SIGINT);
     }
-    
+
     let monitor_result = monitor_child.wait_with_output()?;
     
     // Check if the test process was detected
     let output = String::from_utf8_lossy(&monitor_result.stdout);
-    
     // Should have detected our test process
     assert!(output.contains("test_network") || output.contains("process_detected"),
         "Monitor should detect spawned test process. Output: {}", output);
@@ -76,7 +76,7 @@ fn test_monitor_mode_entitlement_filtering() -> Result<()> {
     let test_env = TestEnvironment::new()?;
     
     // Start monitor with specific entitlement filter and piped output
-    let mut monitor_child = Command::new("./target/release/listent")
+    let monitor_child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
         .arg("0.5")
@@ -105,8 +105,9 @@ fn test_monitor_mode_entitlement_filtering() -> Result<()> {
     let _ = debug_process.wait();
     
     // Stop monitor
+    let pid = monitor_child.id() as i32;
     unsafe {
-        libc::kill(monitor_child.id() as i32, libc::SIGINT);
+        libc::kill(pid, libc::SIGINT);
     }
     
     let monitor_result = monitor_child.wait_with_output()?;
@@ -192,7 +193,7 @@ fn test_monitor_mode_with_path_filters() -> Result<()> {
     let test_env = TestEnvironment::new()?;
     
     // Start monitor with path filter
-    let mut monitor_child = Command::new("./target/release/listent")
+    let monitor_child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
         .arg("1.0")
@@ -212,14 +213,15 @@ fn test_monitor_mode_with_path_filters() -> Result<()> {
     let _ = test_process.kill();
     let _ = test_process.wait();
     
+    let pid = monitor_child.id() as i32;
     unsafe {
-        libc::kill(monitor_child.id() as i32, libc::SIGINT);
+        libc::kill(pid, libc::SIGINT);
     }
     
     let monitor_result = monitor_child.wait_with_output()?;
     
     // Should have detected the process
-    let output = String::from_utf8_lossy(&monitor_result.stdout);
+    let _output = String::from_utf8_lossy(&monitor_result.stdout);
     // This test verifies path filtering is working (though exact behavior may vary)
     
     Ok(())

@@ -12,7 +12,6 @@ pub struct ReliableTestRunner {
 
 enum CleanupHandle {
     Process(u32), // PID to kill
-    TempDir(tempfile::TempDir), // Temp directory to clean
 }
 
 impl ReliableTestRunner {
@@ -36,7 +35,6 @@ impl ReliableTestRunner {
         
         // Set up timeout mechanism
         let (tx, rx) = mpsc::channel();
-        let child_id = child.id();
         let timeout = self.timeout;
         
         // Spawn timeout thread
@@ -61,8 +59,9 @@ impl ReliableTestRunner {
     }
     
     /// Run listent in monitor mode with controlled interruption
+    #[allow(dead_code)]
     pub fn run_monitor_with_interrupt(&mut self, args: &[&str], interrupt_after: Duration) -> Result<TestOutput> {
-        let start = Instant::now();
+        let _start = Instant::now();
         
         let mut cmd = Command::new("./target/release/listent");
         cmd.arg("--monitor");
@@ -73,7 +72,7 @@ impl ReliableTestRunner {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         
-        let mut child = cmd.spawn()?;
+        let child = cmd.spawn()?;
         self.cleanup_handles.push(CleanupHandle::Process(child.id()));
         
         // Wait for specified duration
@@ -161,9 +160,6 @@ impl Drop for ReliableTestRunner {
                     thread::sleep(Duration::from_millis(500));
                     let _ = self.kill_process(*pid);
                 },
-                CleanupHandle::TempDir(_) => {
-                    // TempDir will clean itself up when dropped
-                },
             }
         }
     }
@@ -173,6 +169,7 @@ impl Drop for ReliableTestRunner {
 pub struct TestOutput {
     pub exit_code: Option<i32>,
     pub stdout: String,
+    #[allow(dead_code)]
     pub stderr: String,
     pub duration: Duration,
     pub timed_out: bool,
@@ -207,55 +204,38 @@ impl TestOutput {
         self.stdout.contains(text)
     }
     
+    #[allow(dead_code)]
     pub fn contains_stderr(&self, text: &str) -> bool {
         self.stderr.contains(text)
     }
     
+    #[allow(dead_code)]
     pub fn contains_output(&self, text: &str) -> bool {
         self.stdout.contains(text) || self.stderr.contains(text)
     }
 }
 
 /// Spawn a test process that can be easily controlled and cleaned up
-pub struct ControlledTestProcess {
+struct ControlledTestProcess {
     child: Child,
-    name: String,
-    expected_entitlements: Vec<String>,
 }
 
 impl ControlledTestProcess {
-    pub fn spawn(name: &str, binary_path: &std::path::Path, duration_seconds: f64, expected_entitlements: Vec<String>) -> Result<Self> {
+    fn spawn(_name: &str, binary_path: &std::path::Path, duration_seconds: f64, _expected_entitlements: Vec<String>) -> Result<Self> {
         let child = Command::new(binary_path)
             .arg(duration_seconds.to_string())
             .spawn()?;
             
         Ok(Self {
             child,
-            name: name.to_string(),
-            expected_entitlements,
         })
     }
     
-    pub fn pid(&self) -> u32 {
+    fn pid(&self) -> u32 {
         self.child.id()
     }
     
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    
-    pub fn expected_entitlements(&self) -> &[String] {
-        &self.expected_entitlements
-    }
-    
-    pub fn is_running(&mut self) -> Result<bool> {
-        match self.child.try_wait()? {
-            Some(_) => Ok(false),
-            None => Ok(true),
-        }
-    }
-    
-    pub fn terminate(&mut self) -> Result<()> {
+    fn terminate(&mut self) -> Result<()> {
         let _ = self.child.kill();
         let _ = self.child.wait();
         Ok(())
@@ -269,13 +249,16 @@ impl Drop for ControlledTestProcess {
 }
 
 /// Test scenario builder for complex integration tests
+#[allow(dead_code)]
 pub struct TestScenario {
+    #[allow(dead_code)]
     name: String,
     processes: Vec<ControlledTestProcess>,
     runner: ReliableTestRunner,
 }
 
 impl TestScenario {
+    #[allow(dead_code)]
     pub fn new(name: &str, timeout_seconds: u64) -> Self {
         Self {
             name: name.to_string(),
@@ -284,12 +267,14 @@ impl TestScenario {
         }
     }
     
+    #[allow(dead_code)]
     pub fn spawn_process(&mut self, name: &str, binary_path: &std::path::Path, duration: f64, entitlements: Vec<String>) -> Result<()> {
         let process = ControlledTestProcess::spawn(name, binary_path, duration, entitlements)?;
         self.processes.push(process);
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn run_monitor_test(&mut self, monitor_args: &[&str], test_duration: Duration) -> Result<TestOutput> {
         // Start monitor
         let result = self.runner.run_monitor_with_interrupt(monitor_args, test_duration)?;
@@ -302,6 +287,7 @@ impl TestScenario {
         Ok(result)
     }
     
+    #[allow(dead_code)]
     pub fn get_process_pids(&self) -> Vec<u32> {
         self.processes.iter().map(|p| p.pid()).collect()
     }
@@ -310,7 +296,6 @@ impl TestScenario {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::TempDir;
     
     #[test]
     fn test_reliable_runner_timeout() -> Result<()> {

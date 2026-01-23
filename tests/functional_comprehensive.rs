@@ -40,7 +40,7 @@ fn test_end_to_end_static_scan_workflow() -> Result<()> {
 
 #[test]
 fn test_end_to_end_monitor_workflow() -> Result<()> {
-    let test_env = TestEnvironment::new()?;
+    let _test_env = TestEnvironment::new()?;
     let mut scenario = TestScenario::new("monitor_workflow", 60);
     
     // Start a monitor process
@@ -86,7 +86,7 @@ fn test_signal_handling_reliability() -> Result<()> {
 
 #[test]
 fn test_process_detection_with_controlled_processes() -> Result<()> {
-    let test_env = TestEnvironment::new()?;
+    let _test_env = TestEnvironment::new()?;
     let mut scenario = TestScenario::new("process_detection", 30);
     
     // Spawn test processes with known entitlements after monitor starts
@@ -205,7 +205,7 @@ fn test_concurrent_operations() -> Result<()> {
     let mut handles = vec![];
     
     // Run multiple scans concurrently
-    for i in 0..3 {
+    for _i in 0..3 {
         let test_path = test_env.path().to_path_buf();
         let success_counter = success_count.clone();
         

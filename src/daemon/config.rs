@@ -4,7 +4,6 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -105,52 +104,6 @@ impl DaemonConfiguration {
     /// Get polling interval as Duration
     pub fn polling_duration(&self) -> Duration {
         Duration::from_secs_f64(self.daemon.polling_interval)
-    }
-
-    /// Update configuration field by dot-notation key
-    pub fn update_field(&mut self, key: &str, value: &str) -> Result<()> {
-        match key {
-            "daemon.polling_interval" => {
-                let interval: f64 = value.parse()
-                    .with_context(|| format!("Invalid polling interval: {}", value))?;
-                if interval < 0.1 || interval > 300.0 {
-                    anyhow::bail!("Polling interval must be between 0.1 and 300.0 seconds");
-                }
-                self.daemon.polling_interval = interval;
-            },
-            "daemon.auto_start" => {
-                self.daemon.auto_start = value.parse()
-                    .with_context(|| format!("Invalid boolean value: {}", value))?;
-            },
-            _ => {
-                anyhow::bail!("Unknown configuration key: {}", key);
-            }
-        }
-        Ok(())
-    }
-
-    /// Apply multiple configuration updates atomically
-    pub fn apply_updates(&mut self, updates: &[(String, String)]) -> Result<()> {
-        // Create a backup for rollback
-        let backup = self.clone();
-        
-        // Apply all updates
-        for (key, value) in updates {
-            if let Err(e) = self.update_field(key, value) {
-                // Rollback on any error
-                *self = backup;
-                return Err(e.context(format!("Failed to apply update {}={}", key, value)));
-            }
-        }
-        
-        // Validate the final configuration
-        if let Err(e) = self.validate() {
-            // Rollback on validation failure
-            *self = backup;
-            return Err(e.context("Configuration validation failed after updates"));
-        }
-        
-        Ok(())
     }
 
     /// Create configuration directories if they don't exist

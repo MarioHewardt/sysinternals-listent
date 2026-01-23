@@ -3,8 +3,6 @@
 //! Handles plist generation, service installation, and lifecycle management
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use crate::constants::{LAUNCHD_SERVICE_NAME, LAUNCHD_PLIST_NAME};

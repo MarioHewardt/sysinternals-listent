@@ -22,7 +22,8 @@ use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
 
 /// Check if a listent daemon process is already running
-fn is_daemon_running() -> bool {
+/// Returns true if any listent process with --daemon --monitor flags is running
+pub fn is_daemon_running() -> bool {
     use std::process::Command;
     
     // Look for listent processes with daemon flags
@@ -72,7 +73,7 @@ fn is_daemon_running() -> bool {
 }
 
 /// Daemon runtime state
-pub struct DaemonState {
+struct DaemonState {
     /// Current configuration
     config: Arc<Mutex<DaemonConfiguration>>,
     /// Process tracker for monitoring
@@ -83,7 +84,7 @@ pub struct DaemonState {
 
 impl DaemonState {
     /// Create new daemon state with configuration
-    pub fn new(config: DaemonConfiguration) -> Result<Self> {
+    fn new(config: DaemonConfiguration) -> Result<Self> {
         let logger = DaemonLogger::new(
             APP_SUBSYSTEM.to_string(),
             DAEMON_CATEGORY.to_string(),
@@ -98,29 +99,6 @@ impl DaemonState {
             logger,
         })
     }
-
-    /// Get current configuration
-    pub async fn get_config(&self) -> DaemonConfiguration {
-        self.config.lock().await.clone()
-    }
-
-    /// Update configuration
-    pub async fn update_config(&self, new_config: DaemonConfiguration) -> Result<()> {
-        let mut config = self.config.lock().await;
-        self.logger.log_config_change(
-            "Configuration updated",
-            &format!("{:?}", *config),
-            &format!("{:?}", new_config),
-        )?;
-        *config = new_config;
-        Ok(())
-    }
-}
-
-/// Run the daemon in background mode
-/// This function replaces terminal output with ULS logging
-pub async fn run_daemon_mode() -> Result<()> {
-    run_daemon_with_config(None).await
 }
 
 /// Run daemon with specific configuration path
@@ -301,39 +279,6 @@ async fn run_monitoring_loop(
 /// Setup signal handlers for graceful shutdown
 async fn setup_signal_handlers() {
     let _ = signal::ctrl_c().await;
-}
-
-/// Initialize daemon with configuration
-pub fn initialize_daemon(config_path: Option<PathBuf>) -> Result<()> {
-    // Validate configuration exists and is readable
-    if let Some(ref path) = config_path {
-        if !path.exists() {
-            return Err(anyhow::anyhow!("Configuration file not found: {}", path.display()));
-        }
-        
-        // Try to load and validate configuration
-        let _config = DaemonConfiguration::load_from_file(path)
-            .with_context(|| format!("Failed to load configuration from {}", path.display()))?;
-    }
-
-    // Ensure required directories exist
-    let config = if let Some(ref path) = config_path {
-        DaemonConfiguration::load_from_file(path)?
-    } else {
-        DaemonConfiguration::default()
-    };
-
-    config.ensure_directories()
-        .context("Failed to create required directories")?;
-
-    Ok(())
-}
-
-/// Stop daemon gracefully
-pub fn stop_daemon() -> Result<()> {
-    // Daemon is stopped via signal (SIGTERM) from the daemon-stop command
-    // No cleanup needed here
-    Ok(())
 }
 
 /// Scan current processes and their entitlements

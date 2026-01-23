@@ -14,6 +14,3 @@ pub const LAUNCHD_PLIST_NAME: &str = "com.microsoft.sysinternals.listent.plist";
 
 /// LaunchD service name (same as subsystem)
 pub const LAUNCHD_SERVICE_NAME: &str = APP_SUBSYSTEM;
-
-/// Default daemon log level
-pub const DEFAULT_LOG_LEVEL: &str = "info";

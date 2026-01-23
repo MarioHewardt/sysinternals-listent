@@ -367,38 +367,8 @@ fn show_daemon_status() -> Result<()> {
 
     println!("📊 Checking listent daemon status...");
 
-    // Check for running listent daemon processes
-    let daemon_running = {
-        let output = std::process::Command::new("pgrep")
-            .args(["-f", "listent"])
-            .output();
-        
-        let mut found_daemon = false;
-        if let Ok(result) = output {
-            if result.status.success() && !result.stdout.is_empty() {
-                // Check each listent process to see if it's a daemon
-                let pids: Vec<u32> = String::from_utf8_lossy(&result.stdout)
-                    .lines()
-                    .filter_map(|line| line.trim().parse::<u32>().ok())
-                    .collect();
-                
-                for pid in pids {
-                    // Check command line arguments
-                    if let Ok(cmd_output) = std::process::Command::new("ps")
-                        .args(["-p", &pid.to_string(), "-o", "args="])
-                        .output()
-                    {
-                        let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
-                        if cmd_line.contains("--daemon") && cmd_line.contains("--monitor") {
-                            found_daemon = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        found_daemon
-    };
+    // Check for running listent daemon processes (reuse shared helper)
+    let daemon_running = daemon::is_daemon_running();
 
     // Check LaunchD service status
     let current_exe = std::env::current_exe()
@@ -591,9 +561,11 @@ fn stop_daemon_process() -> Result<()> {
 }
 
 /// Show daemon logs
-fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Result<()> {
+fn show_daemon_logs(_follow: bool, since: Option<String>, format: String) -> Result<()> {
     use crate::daemon::logging::get_daemon_logs;
 
+    // Note: `follow` parameter reserved for future log streaming implementation
+    
     println!("📄 Retrieving daemon logs...");
 
     // Validate time format if provided

@@ -8,30 +8,30 @@ fn test_monitor_mode_startup() {
     cmd.args(&["--monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .assert()
-        .success()
+        .interrupted() // Process is killed by timeout, not clean exit
         .stdout(predicate::str::contains("Starting process monitoring"));
 }
 
 #[test]
 fn test_process_detection_basic() {
-    // This test runs monitor mode briefly and expects it to succeed
+    // This test runs monitor mode briefly and expects it to be interrupted by timeout
     // without requiring specific process detection
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&["--monitor", "--interval", "2.0"])
         .timeout(Duration::from_secs(4))
         .assert()
-        .success();
+        .interrupted();
 }
 
 #[test]
 fn test_ctrl_c_shutdown_handling() {
-    // This test is challenging to implement directly as it requires signal handling
-    // For now, we test that monitor mode can be interrupted with timeout
+    // This test validates that monitor mode runs correctly until interrupted
+    // The timeout() simulates the interrupt
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&["--monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
-        .success(); // Should be cleanly interrupted by timeout
+        .interrupted(); // Interrupted by timeout (simulates Ctrl+C)
 }
 
 #[test]
@@ -46,7 +46,7 @@ fn test_polling_interval_timing() {
     cmd.args(&["--monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .assert()
-        .success();
+        .interrupted();
         
     let elapsed = start.elapsed();
     // Should run for approximately 3 seconds (allowing for startup time)
@@ -61,7 +61,7 @@ fn test_monitor_without_crashes() {
     cmd.args(&["--monitor", "--interval", "0.5"])
         .timeout(Duration::from_secs(5))
         .assert()
-        .success()
+        .interrupted()
         .stderr(predicate::str::contains("panic").not())
         .stderr(predicate::str::contains("error").not());
 }
@@ -73,7 +73,7 @@ fn test_monitor_with_fast_interval() {
     cmd.args(&["--monitor", "--interval", "0.1"])
         .timeout(Duration::from_secs(2))
         .assert()
-        .success();
+        .interrupted();
 }
 
 #[test]
@@ -83,5 +83,5 @@ fn test_monitor_with_slow_interval() {
     cmd.args(&["--monitor", "--interval", "3.0"])
         .timeout(Duration::from_secs(4))
         .assert()
-        .success();
+        .interrupted();
 }

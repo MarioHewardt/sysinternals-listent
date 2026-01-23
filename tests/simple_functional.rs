@@ -34,7 +34,7 @@ fn test_basic_scan_functionality() -> Result<()> {
 #[test]
 fn test_basic_monitor_startup_and_shutdown() -> Result<()> {
     // Start monitor mode
-    let mut child = Command::new("./target/release/listent")
+    let child = Command::new("./target/release/listent")
         .arg("--monitor")
         .arg("--interval")
         .arg("5.0") // Slow interval to reduce noise
@@ -45,8 +45,9 @@ fn test_basic_monitor_startup_and_shutdown() -> Result<()> {
     std::thread::sleep(Duration::from_secs(2));
     
     // Send SIGINT (CTRL-C)
+    let pid = child.id() as i32;
     unsafe {
-        libc::kill(child.id() as i32, libc::SIGINT);
+        libc::kill(pid, libc::SIGINT);
     }
     
     // Wait for it to exit

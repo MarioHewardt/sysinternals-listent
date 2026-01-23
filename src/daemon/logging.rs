@@ -5,57 +5,26 @@
 use anyhow::{Context, Result};
 use serde_json::json;
 use oslog::OsLogger;
-use log::{error, warn, info, debug};
+use log::{error, info};
 use std::process::Command;
 
 /// Enhanced daemon logger for macOS ULS integration
 #[derive(Debug, Clone)]
 pub struct DaemonLogger {
-    /// macOS ULS subsystem identifier
-    subsystem: String,
-    /// ULS category for organizing logs
-    category: String,
     /// Current logging level
     level: LogLevel,
-    /// Unit value - we use log crate macros instead
-    logger: (),
 }
 
 /// Log levels for daemon operations
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LogLevel {
     Error,
-    Warn,
     Info,
-    Debug,
-}
-
-impl LogLevel {
-    /// Convert to ULS log level string
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            LogLevel::Error => "error",
-            LogLevel::Warn => "warning", 
-            LogLevel::Info => "info",
-            LogLevel::Debug => "debug",
-        }
-    }
-
-    /// Parse log level from string
-    pub fn from_str(s: &str) -> Result<Self> {
-        match s.to_lowercase().as_str() {
-            "error" => Ok(LogLevel::Error),
-            "warn" | "warning" => Ok(LogLevel::Warn),
-            "info" => Ok(LogLevel::Info),
-            "debug" => Ok(LogLevel::Debug),
-            _ => anyhow::bail!("Invalid log level: {}", s),
-        }
-    }
 }
 
 impl DaemonLogger {
     /// Initialize daemon logger with ULS subsystem and category
-    pub fn new(subsystem: String, category: String, level: LogLevel) -> Result<Self> {
+    pub fn new(subsystem: String, _category: String, level: LogLevel) -> Result<Self> {
         // Validate subsystem format (should be reverse DNS)
         if !subsystem.contains('.') {
             anyhow::bail!("Subsystem must be in reverse DNS format (e.g., 'com.example.app')");
@@ -68,10 +37,7 @@ impl DaemonLogger {
         log::set_max_level(log::LevelFilter::Debug);
 
         Ok(Self {
-            subsystem,
-            category,
             level,
-            logger: (), // We'll use log macros instead
         })
     }
 
@@ -90,25 +56,12 @@ impl DaemonLogger {
     /// Log daemon shutdown event
     pub fn log_shutdown(&self, reason: &str) -> Result<()> {
         let message = json!({
-            "event": "daemon_shut   down", 
+            "event": "daemon_shutdown", 
             "reason": reason,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
 
         self.log_structured(LogLevel::Info, "Daemon shutting down", &message)
-    }
-
-    /// Log configuration change event
-    pub fn log_config_change(&self, change_description: &str, old_value: &str, new_value: &str) -> Result<()> {
-        let message = json!({
-            "event": "config_change",
-            "description": change_description,
-            "old_value": old_value,
-            "new_value": new_value,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        });
-
-        self.log_structured(LogLevel::Info, "Configuration updated", &message)
     }
 
     /// Log process detection events
@@ -138,18 +91,6 @@ impl DaemonLogger {
         self.log_structured(LogLevel::Error, error_message, &message)
     }
 
-    /// Log warning events
-    pub fn log_warning(&self, warning_message: &str, context: Option<&str>) -> Result<()> {
-        let message = json!({
-            "event": "warning",
-            "message": warning_message,
-            "context": context,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        });
-
-        self.log_structured(LogLevel::Warn, warning_message, &message)
-    }
-
     /// Send structured log message to ULS
     fn log_structured(&self, level: LogLevel, message: &str, data: &serde_json::Value) -> Result<()> {
         // Skip logging if below configured level
@@ -165,14 +106,8 @@ impl DaemonLogger {
             LogLevel::Error => {
                 error!("{}", full_message);
             },
-            LogLevel::Warn => {
-                warn!("{}", full_message);
-            },
             LogLevel::Info => {
                 info!("{}", full_message);
-            },
-            LogLevel::Debug => {
-                debug!("{}", full_message);
             },
         }
         
@@ -183,21 +118,9 @@ impl DaemonLogger {
     fn should_log(&self, level: LogLevel) -> bool {
         match (self.level, level) {
             (LogLevel::Error, LogLevel::Error) => true,
-            (LogLevel::Warn, LogLevel::Error | LogLevel::Warn) => true,
-            (LogLevel::Info, LogLevel::Error | LogLevel::Warn | LogLevel::Info) => true,
-            (LogLevel::Debug, _) => true,
+            (LogLevel::Info, LogLevel::Error | LogLevel::Info) => true,
             _ => false,
         }
-    }
-
-    /// Get current log level
-    pub fn level(&self) -> LogLevel {
-        self.level
-    }
-
-    /// Set log level
-    pub fn set_level(&mut self, level: LogLevel) {
-        self.level = level;
     }
 }
 
@@ -232,12 +155,4 @@ pub fn get_daemon_logs(subsystem: &str, since: &str) -> Result<Vec<String>> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| line.to_string())
         .collect())
-}
-
-/// Log error and return formatted error
-pub fn log_and_bail(logger: &DaemonLogger, message: &str) -> anyhow::Error {
-    if let Err(e) = logger.log_error(message, None) {
-        eprintln!("Failed to log error: {}", e);
-    }
-    anyhow::anyhow!(message.to_string())
 }
