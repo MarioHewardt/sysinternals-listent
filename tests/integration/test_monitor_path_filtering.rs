@@ -5,7 +5,7 @@ use std::time::Duration;
 #[test]
 fn test_monitor_with_single_path_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "/System/Applications/Calculator.app", "--interval", "1.0"])
+    cmd.args(&["monitor", "/System/Applications/Calculator.app", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .assert()
         .interrupted()
@@ -16,7 +16,7 @@ fn test_monitor_with_single_path_filter() {
 fn test_monitor_with_multiple_path_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor", 
+        "monitor", 
         "/System/Applications/Calculator.app",
         "/System/Applications/TextEdit.app",
         "--interval", "1.0"
@@ -30,7 +30,7 @@ fn test_monitor_with_multiple_path_filters() {
 #[test]
 fn test_monitor_with_nonexistent_path() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "/nonexistent/path", "--interval", "1.0"])
+    cmd.args(&["monitor", "/nonexistent/path", "--interval", "1.0"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("does not exist").or(
@@ -45,7 +45,7 @@ fn test_path_filtering_effectiveness() {
     // Test that path filtering actually works by comparing output
     // Use a small directory for fast tests
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "/System/Applications/Calculator.app", "--interval", "1.0"])
+    cmd.args(&["monitor", "/System/Applications/Calculator.app", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted()
@@ -55,7 +55,7 @@ fn test_path_filtering_effectiveness() {
 #[test]
 fn test_monitor_system_applications_path() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "/System/Applications/TextEdit.app", "--interval", "1.0"])
+    cmd.args(&["monitor", "/System/Applications/TextEdit.app", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted()
@@ -66,7 +66,7 @@ fn test_monitor_system_applications_path() {
 fn test_path_filter_with_json_output() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor", 
+        "monitor", 
         "/System/Applications/Calculator.app",
         "--json",
         "--interval", "1.0"
@@ -81,7 +81,7 @@ fn test_path_filter_validation() {
     // Test that empty paths cause failure quickly
     // Skip /dev/null test as it may not fail immediately on all systems
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "", "--interval", "1.0"])
+    cmd.args(&["monitor", "", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .failure();

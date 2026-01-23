@@ -33,7 +33,7 @@ fn test_monitor_mode_detects_new_processes() -> Result<()> {
     
     // Start monitor in background with piped output
     let monitor_child = Command::new("./target/release/listent")
-        .arg("--monitor")
+        .arg("monitor")
         .arg("--interval")
         .arg("0.5") // Fast polling for quick test
         .arg("--json")
@@ -77,7 +77,7 @@ fn test_monitor_mode_entitlement_filtering() -> Result<()> {
     
     // Start monitor with specific entitlement filter and piped output
     let monitor_child = Command::new("./target/release/listent")
-        .arg("--monitor")
+        .arg("monitor")
         .arg("--interval")
         .arg("0.5")
         .arg("-e")
@@ -177,7 +177,7 @@ fn test_monitor_mode_invalid_interval() -> Result<()> {
     
     // Test with invalid (too small) interval
     let result = runner.run_scan(&[
-        "--monitor",
+        "monitor",
         "--interval", "0.05" // Below minimum of 0.1
     ])?;
     
@@ -194,7 +194,7 @@ fn test_monitor_mode_with_path_filters() -> Result<()> {
     
     // Start monitor with path filter
     let monitor_child = Command::new("./target/release/listent")
-        .arg("--monitor")
+        .arg("monitor")
         .arg("--interval")
         .arg("1.0")
         .arg(test_env.path())  // Monitor only our test directory

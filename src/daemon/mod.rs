@@ -22,11 +22,11 @@ use crate::daemon::logging::{DaemonLogger, LogLevel};
 use crate::monitor::process_tracker::ProcessTracker;
 
 /// Check if a listent daemon process is already running
-/// Returns true if any listent process with --daemon --monitor flags is running
+/// Returns true if any listent process with 'daemon run' subcommand is running
 pub fn is_daemon_running() -> bool {
     use std::process::Command;
     
-    // Look for listent processes with daemon flags
+    // Look for listent processes with daemon subcommand
     let output = Command::new("pgrep")
         .args(["-f", "listent"])
         .output();
@@ -54,10 +54,10 @@ pub fn is_daemon_running() -> bool {
                         .output()
                     {
                         let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
-                        // Only match actual listent processes, not sudo commands
+                        // Match 'listent daemon run' command pattern, not sudo commands
                         if cmd_line.contains("listent") && 
-                           cmd_line.contains("--daemon") && 
-                           cmd_line.contains("--monitor") &&
+                           cmd_line.contains("daemon") && 
+                           cmd_line.contains("run") &&
                            !cmd_line.contains("sudo") {
                             return true;
                         }
@@ -136,7 +136,7 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     
     let mut cmd = std::process::Command::new(current_exe);
     cmd.env("LISTENT_DAEMON_CHILD", "1");
-    cmd.arg("--daemon").arg("--monitor");
+    cmd.args(["daemon", "run"]);
     
     if let Some(config) = config_path {
         cmd.arg("--config").arg(config);
@@ -154,14 +154,14 @@ async fn spawn_daemon_child(config_path: Option<PathBuf>) -> Result<()> {
     if is_daemon_running() {
         println!("✅ listent daemon started successfully");
         println!("  Polling interval: {}s", config.daemon.polling_interval);
-        println!("  View logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
-        println!("  Check status: listent daemon-status");
-        println!("  Stop daemon: listent daemon-stop");
+        println!("  View logs: listent daemon logs");
+        println!("  Check status: listent daemon status");
+        println!("  Stop daemon: listent daemon stop");
         Ok(())
     } else {
         eprintln!("❌ Failed to start listent daemon");
         eprintln!("   The daemon process exited unexpectedly");
-        eprintln!("   Check logs: log show --predicate 'subsystem == \"{}\"' --info", APP_SUBSYSTEM);
+        eprintln!("   Check logs: listent daemon logs");
         bail!("Daemon startup failed")
     }
 }

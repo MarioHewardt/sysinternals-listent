@@ -126,7 +126,7 @@ fn test_error_handling_and_edge_cases() -> Result<()> {
     
     // Test invalid interval
     let mut cmd = std::process::Command::new("./target/release/listent");
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
         .arg("--interval")
         .arg("-1.0"); // Invalid negative interval
     let invalid_interval_result = runner.run_command_with_timeout(cmd)?;

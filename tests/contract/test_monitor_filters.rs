@@ -4,7 +4,7 @@ use predicates::prelude::*;
 #[test]
 fn test_monitor_with_path_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "-p", "/Applications", "--interval", "1.0"])
+    cmd.args(&["monitor", "-p", "/Applications", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .success(); // Will fail until path filtering in monitor mode is implemented
@@ -13,7 +13,7 @@ fn test_monitor_with_path_filter() {
 #[test]
 fn test_monitor_with_entitlement_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "-e", "com.apple.security.camera", "--interval", "1.0"])
+    cmd.args(&["monitor", "-e", "com.apple.security.camera", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .success(); // Will fail until entitlement filtering in monitor mode is implemented
@@ -22,7 +22,7 @@ fn test_monitor_with_entitlement_filter() {
 #[test]
 fn test_monitor_with_json_output() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--json", "--interval", "1.0"])
+    cmd.args(&["monitor", "--json", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .success(); // Will fail until JSON output in monitor mode is implemented
@@ -31,7 +31,7 @@ fn test_monitor_with_json_output() {
 #[test]
 fn test_monitor_with_quiet_mode() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--quiet", "--interval", "1.0"])
+    cmd.args(&["monitor", "--quiet", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .success()
@@ -43,7 +43,7 @@ fn test_monitor_with_quiet_mode() {
 fn test_monitor_with_multiple_path_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor", 
+        "monitor", 
         "-p", "/Applications",
         "-p", "/System/Applications",
         "--interval", "1.0"
@@ -57,7 +57,7 @@ fn test_monitor_with_multiple_path_filters() {
 fn test_monitor_with_multiple_entitlement_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.camera",
         "-e", "com.apple.security.microphone", 
         "--interval", "1.0"
@@ -71,7 +71,7 @@ fn test_monitor_with_multiple_entitlement_filters() {
 fn test_monitor_combined_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-p", "/Applications",
         "-e", "com.apple.security.camera",
         "--json",

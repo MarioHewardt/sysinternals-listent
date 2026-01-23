@@ -5,7 +5,7 @@ use std::time::Duration;
 #[test]
 fn test_monitor_json_output_format() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    let output = cmd.args(&["--monitor", "--json", "--interval", "1.0"])
+    let output = cmd.args(&["monitor", "--json", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .output()
         .expect("Failed to execute");
@@ -29,7 +29,7 @@ fn test_monitor_json_output_format() {
 #[test]
 fn test_monitor_quiet_mode_suppresses_startup() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--quiet", "--interval", "1.0"])
+    cmd.args(&["monitor", "--quiet", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted()
@@ -40,7 +40,7 @@ fn test_monitor_quiet_mode_suppresses_startup() {
 #[test]
 fn test_monitor_human_readable_format() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "1.0"])
+    cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted()
@@ -52,7 +52,7 @@ fn test_monitor_human_readable_format() {
 fn test_monitor_error_message_formatting() {
     // Test error messages are properly formatted
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "0.05"]) // Invalid interval
+    cmd.args(&["monitor", "--interval", "0.05"]) // Invalid interval
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid polling interval"))
@@ -63,7 +63,7 @@ fn test_monitor_error_message_formatting() {
 fn test_monitor_real_time_output_streaming() {
     // Test that output appears in real-time, not buffered
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "0.5"])
+    cmd.args(&["monitor", "--interval", "0.5"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted(); // Process is killed by timeout
@@ -72,7 +72,7 @@ fn test_monitor_real_time_output_streaming() {
 #[test]
 fn test_monitor_json_with_quiet_mode() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--json", "--quiet", "--interval", "1.0"])
+    cmd.args(&["monitor", "--json", "--quiet", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
         .interrupted(); // Process is killed by timeout
@@ -83,7 +83,7 @@ fn test_monitor_output_with_filters() {
     // Test output format when filters are applied
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "/System/Applications/Calculator.app",
         "-e", "sandbox",
         "--interval", "1.0"

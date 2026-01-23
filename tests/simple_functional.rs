@@ -35,7 +35,7 @@ fn test_basic_scan_functionality() -> Result<()> {
 fn test_basic_monitor_startup_and_shutdown() -> Result<()> {
     // Start monitor mode
     let child = Command::new("./target/release/listent")
-        .arg("--monitor")
+        .arg("monitor")
         .arg("--interval")
         .arg("5.0") // Slow interval to reduce noise
         .arg("--quiet")

@@ -1,12 +1,9 @@
 //! CLI argument parsing and validation module
 //! 
 //! Handles command-line interface using clap, including:
-//! - Path filtering options
-//! - Entitlement filtering options  
-//! - Output format selection (human/JSON)
-//! - Verbosity and quiet modes
-//! - Monitor mode with real-time process detection
-//! - Help and version commands
+//! - Scan mode (default): scan files/directories for entitlements
+//! - Monitor subcommand: real-time process monitoring
+//! - Daemon subcommand: background daemon operations
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -16,105 +13,118 @@ use std::time::Duration;
 
 /// Default directories to scan if no paths are provided
 const DEFAULT_SCAN_PATHS: &[&str] = &[
-    "/Applications",
+    "/usr/bin",
+    "/usr/sbin",
 ];
 
 /// Command line arguments for listent
 #[derive(Parser)]
-#[command(author, version, about)]
-#[command(long_about = "A fast Sysinternals command-line tool to discover and list code signing entitlements for macOS executable binaries.
-
-OPERATING MODES:
-  1. Static Scan Mode (default)    - Scan files/directories for entitlements
-     Usage: listent [PATH...] [--entitlement KEY] [--json] [--quiet]
-     
-  2. Real-time Monitor Mode        - Monitor new processes for entitlements  
-     Usage: listent --monitor [--interval SECONDS] [PATH...] [--entitlement KEY]
-     
-  3. Background Daemon Mode        - Run monitoring as persistent daemon
-     Usage: listent --daemon [--config FILE]
-     Management: listent {install-daemon|daemon-status|daemon-stop}
-
-ENTITLEMENT FILTERING EXAMPLES:
-  listent /usr/bin -e \"com.apple.security.network.client\"     # Exact match
-  listent /Applications -e \"com.apple.security.*\"              # All security entitlements
-  listent /usr/bin /Applications -e \"*network*\"                # Multiple paths + patterns
-  listent -e \"com.apple.private.*\" -e \"*.debug.*\"            # Multiple patterns (OR logic)
-
-NOTE: Always quote patterns containing wildcards (*?[]) to prevent shell expansion.")]
+#[command(author, version, about, disable_help_subcommand = true)]
+#[command(after_help = "Examples:
+  listent                                      Scan default paths (/usr/bin, /usr/sbin)
+  listent /Applications -e \"*network*\"         Scan with entitlement filter
+  listent monitor                              Monitor all new processes
+  listent monitor -e \"com.apple.security.*\"    Monitor with entitlement filter
+  listent daemon install                       Install as background service")]
 pub struct Args {
-    /// Daemon management subcommands
+    /// Subcommands (monitor, daemon)
     #[command(subcommand)]
     pub command: Option<Commands>,
 
-    // === SCAN TARGET OPTIONS ===
-    /// Directory or file paths to scan (default: /Applications)
-    /// 
-    /// Supports multiple paths: listent /path1 /path2 /path3
-    #[arg(value_name = "PATH", help_heading = "Scan Target")]
+    /// Directory or file paths to scan (default: /usr/bin, /usr/sbin)
+    #[arg(value_name = "PATH")]
     pub path: Vec<PathBuf>,
 
-    /// Filter by entitlement key (exact match or glob pattern)
-    /// 
-    /// Supports exact matching (e.g., "com.apple.security.network.client") and
-    /// glob patterns (e.g., "com.apple.security.*", "*network*", "*.client").
-    /// 
-    /// Multiple filters: -e key1 -e key2 OR -e key1,key2 (logical OR)
-    #[arg(short, long, value_name = "KEY", help_heading = "Filtering", value_delimiter = ',')]
+    /// Filter by entitlement key (exact or glob pattern)
+    #[arg(short, long, value_name = "PATTERN", value_delimiter = ',')]
     pub entitlement: Vec<String>,
 
-    // === OUTPUT OPTIONS ===
     /// Output in JSON format
-    #[arg(short, long, help_heading = "Output")]
+    #[arg(short, long)]
     pub json: bool,
 
     /// Suppress warnings about unreadable files
-    #[arg(short, long, help_heading = "Output")]
+    #[arg(short, long)]
     pub quiet: bool,
-
-    // === MONITORING MODE ===
-    /// Enable real-time process monitoring mode
-    #[arg(short, long, help_heading = "Monitoring")]
-    pub monitor: bool,
-
-    /// Polling interval in seconds (0.1 - 300.0) [monitoring mode only]
-    #[arg(long, default_value = "1.0", value_name = "SECONDS", help_heading = "Monitoring")]
-    pub interval: f64,
-
-    // === DAEMON MODE ===
-    /// Run as background daemon (automatically enables monitoring)
-    #[arg(long, help_heading = "Daemon")]
-    pub daemon: bool,
-
-    /// Path to daemon configuration file
-    #[arg(short, long, value_name = "FILE", help_heading = "Daemon")]
-    pub config: Option<PathBuf>,
 }
 
-/// Daemon management subcommands
+/// Top-level subcommands
 #[derive(Subcommand, Debug, Clone)]
-#[command(about = "Daemon service management commands")]
 pub enum Commands {
-    /// Install daemon service with LaunchD
-    InstallDaemon {
+    /// Real-time process monitoring for entitlements
+    #[command(about = "Monitor new processes for entitlements in real-time")]
+    Monitor {
+        /// Directory or file paths to filter monitored processes
+        #[arg(value_name = "PATH")]
+        path: Vec<PathBuf>,
+
+        /// Filter by entitlement key (exact match or glob pattern)
+        #[arg(short, long, value_name = "KEY", value_delimiter = ',')]
+        entitlement: Vec<String>,
+
+        /// Polling interval in seconds (0.1 - 300.0)
+        #[arg(short, long, default_value = "1.0", value_name = "SECONDS")]
+        interval: f64,
+
+        /// Output in JSON format
+        #[arg(short, long)]
+        json: bool,
+
+        /// Suppress warnings
+        #[arg(short, long)]
+        quiet: bool,
+    },
+
+    /// Daemon management commands
+    #[command(about = "Background daemon operations")]
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonCommands,
+    },
+}
+
+/// Daemon subcommands
+#[derive(Subcommand, Debug, Clone)]
+pub enum DaemonCommands {
+    /// Run daemon in foreground (for testing or manual operation)
+    #[command(about = "Run daemon in foreground")]
+    Run {
         /// Path to configuration file
-        #[arg(long, value_name = "FILE")]
+        #[arg(short, long, value_name = "FILE")]
         config: Option<PathBuf>,
     },
+
+    /// Install daemon as LaunchD service
+    #[command(about = "Install daemon as LaunchD service (requires sudo)")]
+    Install {
+        /// Path to configuration file
+        #[arg(short, long, value_name = "FILE")]
+        config: Option<PathBuf>,
+    },
+
     /// Uninstall daemon service from LaunchD
-    UninstallDaemon,
+    #[command(about = "Uninstall daemon service (requires sudo)")]
+    Uninstall,
+
     /// Check daemon service status
-    DaemonStatus,
+    #[command(about = "Show daemon service status")]
+    Status,
+
     /// Stop running daemon process
-    DaemonStop,
+    #[command(about = "Stop running daemon process")]
+    Stop,
+
     /// View daemon logs
+    #[command(about = "View daemon logs from macOS Unified Logging System")]
     Logs {
         /// Follow log output continuously
         #[arg(short, long)]
         follow: bool,
+
         /// Show logs since specific time (e.g., "1h", "30m", "2023-01-01 10:00")
         #[arg(long, value_name = "TIME")]
         since: Option<String>,
+
         /// Output format (json, human)
         #[arg(long, default_value = "human")]
         format: String,
@@ -125,14 +135,9 @@ pub enum Commands {
 pub fn parse_args() -> Result<ScanConfig> {
     let args = Args::parse();
     
-    // Validate that --interval requires --monitor or --daemon
-    if args.interval != 1.0 && !args.monitor && !args.daemon {
-        return Err(anyhow!("--interval requires --monitor or --daemon"));
-    }
-
-    // If monitor or daemon mode is enabled, this function shouldn't be called
-    if args.monitor || args.daemon {
-        return Err(anyhow!("Internal error: parse_args() called in monitor/daemon mode"));
+    // This function is only for scan mode (no subcommand)
+    if args.command.is_some() {
+        return Err(anyhow!("Internal error: parse_args() called with subcommand"));
     }
 
     // Validate paths if provided
@@ -168,42 +173,39 @@ pub fn parse_args() -> Result<ScanConfig> {
 }
 
 /// Parse command line arguments and return monitor configuration
-pub fn parse_monitor_config() -> Result<PollingConfiguration> {
-    let args = Args::parse();
-    
-    // Validate that monitor mode is enabled
-    if !args.monitor {
-        return Err(anyhow!("--monitor flag is required for monitor mode"));
-    }
-
+pub fn parse_monitor_config(
+    path: Vec<PathBuf>,
+    entitlement: Vec<String>,
+    interval: f64,
+    json: bool,
+    quiet: bool,
+) -> Result<PollingConfiguration> {
     // Validate interval range
-    if args.interval < 0.1 || args.interval > 300.0 {
-        return Err(MonitorError::InvalidInterval(args.interval).into());
+    if interval < 0.1 || interval > 300.0 {
+        return Err(MonitorError::InvalidInterval(interval).into());
     }
 
     // Validate entitlement filters if provided
-    if !args.entitlement.is_empty() {
-        crate::entitlements::pattern_matcher::validate_entitlement_filters(&args.entitlement)
+    if !entitlement.is_empty() {
+        crate::entitlements::pattern_matcher::validate_entitlement_filters(&entitlement)
             .context("Invalid entitlement filter")?;
     }
 
     // Validate paths if provided
     let mut path_filters = Vec::new();
-    if !args.path.is_empty() {
-        for path in &args.path {
-            if !path.exists() {
-                return Err(anyhow!("Path does not exist: {}", path.display()));
-            }
-            path_filters.push(path.clone());
+    for p in &path {
+        if !p.exists() {
+            return Err(anyhow!("Path does not exist: {}", p.display()));
         }
+        path_filters.push(p.clone());
     }
 
     Ok(PollingConfiguration {
-        interval: Duration::from_secs_f64(args.interval),
+        interval: Duration::from_secs_f64(interval),
         path_filters,
-        entitlement_filters: args.entitlement,
-        output_json: args.json,
-        quiet_mode: args.quiet,
+        entitlement_filters: entitlement,
+        output_json: json,
+        quiet_mode: quiet,
     })
 }
 
@@ -212,37 +214,20 @@ pub fn parse_args_raw() -> Result<Args> {
     Ok(Args::parse())
 }
 
-/// Validate CLI arguments for compatibility
-fn validate_args_compatibility(args: &Args) -> Result<()> {
-    // Interval validation (only matters when not in daemon mode, which auto-enables monitor)
-    if args.interval != 1.0 && !args.monitor && !args.daemon {
-        return Err(anyhow!("--interval requires --monitor or --daemon flag"));
-    }
-
-    if args.interval < 0.1 || args.interval > 300.0 {
-        return Err(MonitorError::InvalidInterval(args.interval).into());
-    }
-
-    Ok(())
-}
-
 /// Get execution mode based on CLI arguments
 pub fn get_execution_mode() -> Result<ExecutionMode> {
     let args = Args::parse();
     
-    // Validate argument compatibility
-    validate_args_compatibility(&args)?;
-    
     match args.command {
-        Some(command) => Ok(ExecutionMode::Subcommand(command.clone())),
+        Some(Commands::Monitor { path, entitlement, interval, json, quiet }) => {
+            Ok(ExecutionMode::Monitor { path, entitlement, interval, json, quiet })
+        }
+        Some(Commands::Daemon { action }) => {
+            Ok(ExecutionMode::Daemon(action))
+        }
         None => {
-            if args.daemon {
-                Ok(ExecutionMode::Daemon)
-            } else if args.monitor {
-                Ok(ExecutionMode::Monitor)
-            } else {
-                Ok(ExecutionMode::Scan)
-            }
+            // Default: scan mode
+            Ok(ExecutionMode::Scan)
         }
     }
 }
@@ -251,9 +236,14 @@ pub fn get_execution_mode() -> Result<ExecutionMode> {
 #[derive(Debug)]
 pub enum ExecutionMode {
     Scan,
-    Monitor,
-    Daemon,
-    Subcommand(Commands),
+    Monitor {
+        path: Vec<PathBuf>,
+        entitlement: Vec<String>,
+        interval: f64,
+        json: bool,
+        quiet: bool,
+    },
+    Daemon(DaemonCommands),
 }
 
 /// Validate time format for log filtering

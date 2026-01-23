@@ -64,7 +64,7 @@ impl ReliableTestRunner {
         let _start = Instant::now();
         
         let mut cmd = Command::new("./target/release/listent");
-        cmd.arg("--monitor");
+        cmd.arg("monitor");
         for arg in args {
             cmd.arg(arg);
         }

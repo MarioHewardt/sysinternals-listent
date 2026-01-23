@@ -44,22 +44,24 @@ src/
 
 ## Feature: Real-time Process Monitoring
 
-### CLI Extensions
+### CLI Structure
 ```rust
-// Add to existing CLI structure
-#[derive(Parser)]
-pub struct Args {
-    // Existing fields...
-    
-    /// Enable real-time process monitoring mode
-    #[arg(long)]
-    pub monitor: bool,
-    
-    /// Polling interval in seconds (0.1 - 300.0)
-    #[arg(long, default_value = "1.0")]
-    pub interval: f64,
+// Monitor subcommand structure
+#[derive(Subcommand)]
+pub enum Commands {
+    /// Real-time process monitoring
+    Monitor {
+        path: Vec<PathBuf>,
+        entitlement: Vec<String>,
+        interval: f64,
+        json: bool,
+        quiet: bool,
+    },
+    // ... other subcommands
 }
 ```
+
+Usage: `listent monitor [OPTIONS] [PATH...]`
 
 ### New Data Model Types
 ```rust
@@ -167,25 +169,36 @@ mod tests {
 
 ### CLI Extensions for Daemon Management
 ```rust
-// Extended CLI with subcommands
-#[derive(Parser)]
-pub struct Args {
-    #[command(subcommand)]
-    pub command: Option<Commands>,
-    // ... existing fields
-    #[arg(long)]
-    pub daemon: bool,
+// Nested daemon subcommands
+#[derive(Subcommand)]
+pub enum Commands {
+    Monitor { /* ... */ },
+    
+    /// Daemon management commands
+    Daemon {
+        #[command(subcommand)]
+        action: DaemonCommands,
+    },
 }
 
 #[derive(Subcommand)]
-pub enum Commands {
-    InstallDaemon { config: Option<PathBuf> },
-    UninstallDaemon,
-    DaemonStatus,
-    UpdateConfig { updates: Vec<String> },
+pub enum DaemonCommands {
+    Run { config: Option<PathBuf> },
+    Install { config: Option<PathBuf> },
+    Uninstall,
+    Status,
+    Stop,
     Logs { follow: bool, since: Option<String> },
 }
 ```
+
+Usage:
+- `listent daemon run [--config FILE]`
+- `listent daemon install [--config FILE]`
+- `listent daemon uninstall`
+- `listent daemon status`
+- `listent daemon stop`
+- `listent daemon logs [--since TIME]`
 
 ### Daemon Configuration Types
 ```rust
@@ -212,7 +225,7 @@ pub struct DaemonSettings {
 ```rust
 // src/daemon/launchd.rs
 pub struct LaunchDPlist {
-    pub label: String,              // com.github.mariohewardt.listent
+    pub label: String,              // com.microsoft.sysinternals.listent
     pub program_arguments: Vec<String>,
     pub run_at_load: bool,
     pub keep_alive: bool,
@@ -303,7 +316,7 @@ mod tests {
 ### Phase 2: Monitor Feature Implementation (002-add-monitor-switch)
 - **Status**: ✅ COMPLETE 
 - **Key Features Implemented**:
-  - Real-time process monitoring with `--monitor` flag
+  - Real-time process monitoring with `monitor` subcommand
   - Configurable polling intervals with `--interval` (0.1-300.0 seconds)
   - Process entitlement extraction and filtering
   - Human-readable and JSON output formats
@@ -324,7 +337,7 @@ mod tests {
   - ✅ Directory name display in progress output
   - ✅ Skip tracking for non-executable files
 - **Default Path Optimization**:
-  - ✅ Reduced from 5 system directories to single `/Applications` directory
+  - ✅ Default scan paths set to `/usr/bin` and `/usr/sbin`
   - ✅ Significantly faster default scans with maintained functionality
   - ✅ Updated help text and documentation
 - **Interrupt Handling Refinement**:

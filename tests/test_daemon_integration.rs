@@ -10,12 +10,12 @@ use tempfile::tempdir;
 
 #[test]
 fn test_daemon_startup_process() {
-    // Test that daemon can start in background mode (--daemon implies --monitor)
+    // Test that daemon can start in background mode (daemon run subcommand)
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // --daemon should work without --monitor (monitor is implied)
+    // daemon run starts monitoring in daemon mode
     // The daemon will start and run until timeout
-    cmd.args(&["--daemon"])
+    cmd.args(&["daemon", "run"])
        .timeout(Duration::from_secs(2))
        .assert()
        .interrupted(); // Daemon starts successfully and runs until timeout
@@ -43,7 +43,7 @@ entitlement_filters = []
     // Test daemon startup with custom config
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Permission denied").or(
@@ -76,7 +76,7 @@ level = "debug"
 
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Permission denied").or(
@@ -91,7 +91,7 @@ fn test_daemon_status_command() {
     // Test daemon status command - should succeed and show status info
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.arg("daemon-status")
+    cmd.args(&["daemon", "status"])
        .assert()
        .success()
        .stdout(predicate::str::contains("Checking listent daemon status"));
@@ -103,7 +103,7 @@ fn test_daemon_launchd_integration() {
     // Will fail due to permission issues (can't write to /Library/LaunchDaemons)
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.arg("install-daemon")
+    cmd.args(&["daemon", "install"])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Permission denied").or(
@@ -137,7 +137,7 @@ level = "info"
     // Test daemon with monitoring configuration
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Permission denied").or(

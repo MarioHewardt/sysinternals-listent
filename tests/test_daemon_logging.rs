@@ -10,11 +10,11 @@ use tempfile::tempdir;
 
 #[test]
 fn test_daemon_startup_logging() {
-    // Test that daemon startup works (--daemon implies --monitor)
+    // Test that daemon startup works (daemon run subcommand)
     // The daemon will start and run until timeout
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.args(&["--daemon"])
+    cmd.args(&["daemon", "run"])
        .timeout(std::time::Duration::from_secs(2))
        .assert()
        .interrupted(); // Daemon starts successfully and runs until timeout
@@ -33,7 +33,7 @@ auto_start = false
 
 [logging]
 level = "debug"
-subsystem = "com.github.mariohewardt.listent"
+subsystem = "com.microsoft.sysinternals.listent"
 category = "daemon"
 
 [monitoring]
@@ -45,7 +45,7 @@ entitlement_filters = []
     
     // Will fail due to permission issues (can't write to system directories)
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Permission denied").or(
@@ -71,7 +71,7 @@ auto_start = false
 
 [logging]
 level = "{}"
-subsystem = "com.github.mariohewardt.listent"
+subsystem = "com.microsoft.sysinternals.listent"
 category = "daemon"
 
 [monitoring]
@@ -83,7 +83,7 @@ entitlement_filters = []
         
         // Will fail due to permission issues (can't write to system directories)
         let mut cmd = Command::cargo_bin("listent").unwrap();
-        cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+        cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
            .assert()
            .failure()
            .stderr(predicate::str::contains("Permission denied").or(
@@ -96,10 +96,10 @@ entitlement_filters = []
 
 #[test]
 fn test_daemon_logs_command() {
-    // Test that logs command retrieves daemon logs
+    // Test that daemon logs command retrieves daemon logs
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.arg("logs")
+    cmd.args(&["daemon", "logs"])
        .assert()
        .success()
        .stdout(predicate::str::contains("Retrieving daemon logs"));
@@ -107,10 +107,10 @@ fn test_daemon_logs_command() {
 
 #[test]
 fn test_daemon_logs_follow_mode() {
-    // Test that logs --follow works (use timeout since it runs indefinitely)
+    // Test that daemon logs --follow works (use timeout since it runs indefinitely)
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.args(&["logs", "--follow"])
+    cmd.args(&["daemon", "logs", "--follow"])
        .timeout(std::time::Duration::from_millis(500))
        .assert()
        .interrupted() // Should be interrupted by timeout
@@ -119,10 +119,10 @@ fn test_daemon_logs_follow_mode() {
 
 #[test]
 fn test_daemon_logs_time_filtering() {
-    // Test that logs --since filters by time
+    // Test that daemon logs --since filters by time
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.args(&["logs", "--since", "1h"])
+    cmd.args(&["daemon", "logs", "--since", "1h"])
        .assert()
        .success()
        .stdout(predicate::str::contains("Retrieving daemon logs"));
@@ -133,7 +133,7 @@ fn test_daemon_log_structured_format() {
     // Test that daemon logs can be output in structured JSON format
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.args(&["logs", "--format", "json"])
+    cmd.args(&["daemon", "logs", "--format", "json"])
        .assert()
        .success()
        .stdout(predicate::str::contains("Retrieving daemon logs"));
@@ -141,11 +141,11 @@ fn test_daemon_log_structured_format() {
 
 #[test]
 fn test_daemon_no_terminal_output() {
-    // Test that daemon mode works without explicit --monitor (it's implied)
+    // Test that daemon run subcommand works for daemon mode
     // The daemon will start and run until timeout
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    cmd.args(&["--daemon"])
+    cmd.args(&["daemon", "run"])
        .timeout(std::time::Duration::from_secs(2))
        .assert()
        .interrupted(); // Daemon starts successfully and runs until timeout

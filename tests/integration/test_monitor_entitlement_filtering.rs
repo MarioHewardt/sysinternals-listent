@@ -6,7 +6,7 @@ use std::time::Duration;
 fn test_monitor_with_camera_entitlement_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor", 
+        "monitor", 
         "-e", "com.apple.security.device.camera",
         "--interval", "1.0"
     ])
@@ -20,7 +20,7 @@ fn test_monitor_with_camera_entitlement_filter() {
 fn test_monitor_with_microphone_entitlement_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.device.microphone", 
         "--interval", "1.0"
     ])
@@ -34,7 +34,7 @@ fn test_monitor_with_microphone_entitlement_filter() {
 fn test_monitor_with_multiple_entitlement_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.device.camera",
         "-e", "com.apple.security.device.microphone",
         "--interval", "1.0"
@@ -48,7 +48,7 @@ fn test_monitor_with_multiple_entitlement_filters() {
 fn test_monitor_with_network_entitlement_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.network.client",
         "--interval", "1.0"
     ])
@@ -62,7 +62,7 @@ fn test_monitor_with_network_entitlement_filter() {
 fn test_entitlement_filter_with_json_output() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.app-sandbox",
         "--json",
         "--interval", "1.0"
@@ -77,7 +77,7 @@ fn test_entitlement_filter_partial_matching() {
     // Test that partial entitlement strings work for filtering
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "camera", // Should match com.apple.security.device.camera
         "--interval", "1.0"
     ])
@@ -92,7 +92,7 @@ fn test_processes_with_no_entitlements() {
     // This should still work but may not produce output
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "nonexistent.entitlement",
         "--interval", "1.0"
     ])
@@ -106,7 +106,7 @@ fn test_entitlement_extraction_error_handling() {
     // Test that monitor continues even if entitlement extraction fails
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "-e", "com.apple.security.app-sandbox",
         "--interval", "0.5"
     ])

@@ -39,7 +39,8 @@ impl LaunchDPlist {
             label: LAUNCHD_SERVICE_NAME.to_string(),
             program_arguments: vec![
                 daemon_path.to_string_lossy().to_string(),
-                "--daemon".to_string(),
+                "daemon".to_string(),
+                "run".to_string(),
             ],
             run_at_load: true,
             keep_alive: true,
@@ -241,10 +242,10 @@ impl LaunchDPlist {
         if let Some(config) = config_path {
             plist.program_arguments = vec![
                 daemon_path.to_string_lossy().to_string(),
+                "daemon".to_string(),
+                "run".to_string(),
                 "--config".to_string(),
                 config.to_string_lossy().to_string(),
-                "--monitor".to_string(),
-                "--daemon".to_string(),
             ];
         }
 
@@ -259,6 +260,9 @@ impl LaunchDPlist {
         println!("✅ Daemon service installed successfully");
         println!("   Service: {}", self.label);
         println!("   Plist: {}", plist_path.display());
+        println!("   View logs: listent daemon logs");
+        println!("   Check status: listent daemon status");
+        println!("   Uninstall: sudo listent daemon uninstall");
         
         Ok(())
     }

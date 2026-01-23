@@ -3,10 +3,10 @@ use predicates::prelude::*;
 
 #[test]
 fn test_monitor_flag_parsing() {
-    // Test that --monitor flag is recognized by checking it produces expected output
+    // Test that monitor subcommand is recognized by checking it produces expected output
     // We use timeout but focus on checking the output exists rather than exact content
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
         .timeout(std::time::Duration::from_millis(200))
         .assert()
         .interrupted(); // Should be interrupted by timeout after starting successfully
@@ -21,7 +21,7 @@ fn test_interval_parameter_validation() {
     
     // Test invalid interval - too low
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "0.05"])
+    cmd.args(&["monitor", "--interval", "0.05"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid polling interval"))
@@ -29,7 +29,7 @@ fn test_interval_parameter_validation() {
 
     // Test invalid interval - too high
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "500.0"])
+    cmd.args(&["monitor", "--interval", "500.0"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("Invalid polling interval"))
@@ -42,27 +42,27 @@ fn test_monitor_help_text() {
     cmd.arg("--help")
         .assert()
         .success()
-        .stdout(predicate::str::contains("--monitor"))
-        .stdout(predicate::str::contains("Enable real-time process monitoring"))
-        .stdout(predicate::str::contains("--interval"))
-        .stdout(predicate::str::contains("Polling interval"));
+        .stdout(predicate::str::contains("monitor"))
+        .stdout(predicate::str::contains("Monitor new processes for entitlements in real-time").or(
+            predicate::str::contains("Real-time Monitor Mode")
+        ));
 }
 
 #[test]
 fn test_monitor_with_invalid_arguments() {
     // Test monitor with invalid path
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "/nonexistent"])
+    cmd.args(&["monitor", "/nonexistent"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("does not exist"));
 
-    // Test monitor without required monitor flag
+    // Test --interval without monitor subcommand
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&["--interval", "5.0"])
         .assert()
         .failure()
-        .stderr(predicate::str::contains("--interval requires --monitor").or(
-           predicate::str::contains("--interval requires --monitor or --daemon")
+        .stderr(predicate::str::contains("unexpected argument").or(
+           predicate::str::contains("error")
        ));
 }

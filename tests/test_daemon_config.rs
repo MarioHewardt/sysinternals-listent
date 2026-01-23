@@ -28,7 +28,7 @@ entitlement_filters = ["com.apple.security.network.client"]
     
     // Test daemon with config file - should fail due to file not existing or permission error
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure() // Will fail due to permission issues writing plist file
        .stderr(predicate::str::contains("Permission denied").or(
@@ -56,7 +56,7 @@ entitlement_filters = []
     
     // Test daemon with invalid config (will fail until implemented)
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure() // Will fail due to invalid config
        .stderr(predicate::str::contains("invalid").or(
@@ -83,7 +83,7 @@ entitlement_filters = []
     fs::write(&config_path, bounds_config).unwrap();
     
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["install-daemon", "--config", config_path.to_str().unwrap()])
+    cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
        .stderr(predicate::str::contains("Invalid polling interval").or(
@@ -95,7 +95,7 @@ entitlement_filters = []
 fn test_default_configuration_generation() {
     // Test that daemon can generate default configuration - will fail due to permissions
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("install-daemon")
+    cmd.args(&["daemon", "install"])
        .assert()
        .failure() // Will fail due to permission issues
        .stderr(predicate::str::contains("Permission denied").or(

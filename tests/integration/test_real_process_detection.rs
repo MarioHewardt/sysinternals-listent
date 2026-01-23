@@ -303,7 +303,7 @@ fn test_scan_with_progress_indicator() {
 fn test_monitor_detects_existing_processes() {
     // Monitor mode should see currently running processes
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "0.5"])
+    cmd.args(&["monitor", "--interval", "0.5"])
         .timeout(Duration::from_secs(3))
         .assert()
         .interrupted();
@@ -316,7 +316,7 @@ fn test_monitor_detects_existing_processes() {
 fn test_monitor_with_applications_path_filter() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     cmd.args(&[
-        "--monitor",
+        "monitor",
         "/System/Applications/Calculator.app",
         "--interval", "0.5"
     ])
@@ -329,7 +329,7 @@ fn test_monitor_with_applications_path_filter() {
 fn test_monitor_json_output_with_real_processes() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     let output = cmd.args(&[
-        "--monitor",
+        "monitor",
         "--json",
         "--interval", "0.5"
     ])

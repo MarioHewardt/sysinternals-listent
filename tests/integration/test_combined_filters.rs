@@ -119,7 +119,7 @@ fn test_overlapping_glob_patterns() {
 #[test]
 fn test_monitor_combined_path_and_entitlement() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("-e").arg("com.apple.security.*")
        .arg("--interval").arg("10.0")
@@ -133,7 +133,7 @@ fn test_monitor_combined_path_and_entitlement() {
 #[test]
 fn test_monitor_multiple_path_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("/System/Applications/TextEdit.app")
        .arg("--interval").arg("10.0")
@@ -147,7 +147,7 @@ fn test_monitor_multiple_path_filters() {
 #[test]
 fn test_monitor_multiple_entitlement_filters() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
        .arg("-e").arg("com.apple.security.device.camera")
        .arg("-e").arg("com.apple.security.device.microphone")
        .arg("--interval").arg("10.0")
@@ -161,7 +161,7 @@ fn test_monitor_multiple_entitlement_filters() {
 #[test]
 fn test_monitor_all_filter_options_combined() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("-e").arg("com.apple.security.*")
        .arg("--json")
@@ -188,7 +188,7 @@ fn test_empty_entitlement_filter_matches_all_with_entitlements() {
 #[test]
 fn test_monitor_no_filters_monitors_all() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.arg("--monitor")
+    cmd.arg("monitor")
        .arg("--interval").arg("10.0")
        .timeout(Duration::from_secs(2));
     

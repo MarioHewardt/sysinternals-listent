@@ -4,7 +4,7 @@ use predicates::prelude::*;
 #[test]
 fn test_human_readable_output_format() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "1.0"])
+    cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout results in interrupted status
@@ -15,7 +15,7 @@ fn test_human_readable_output_format() {
 #[test]
 fn test_json_output_format() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--json", "--interval", "1.0"])
+    cmd.args(&["monitor", "--json", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout results in interrupted status
@@ -28,7 +28,7 @@ fn test_json_output_format() {
 #[test]
 fn test_timestamp_formatting() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "1.0"])
+    cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout results in interrupted status
@@ -38,7 +38,7 @@ fn test_timestamp_formatting() {
 #[test]
 fn test_entitlements_list_formatting() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "1.0"])
+    cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout results in interrupted status
@@ -48,7 +48,7 @@ fn test_entitlements_list_formatting() {
 #[test]
 fn test_quiet_mode_output_suppression() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--quiet", "--interval", "1.0"])
+    cmd.args(&["monitor", "--quiet", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout results in interrupted status
@@ -60,7 +60,7 @@ fn test_quiet_mode_output_suppression() {
 fn test_no_entitlements_formatting() {
     // Test basic monitor mode
     let mut cmd = Command::cargo_bin("listent").unwrap();
-    cmd.args(&["--monitor", "--interval", "1.0"])
+    cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted(); // Timeout results in interrupted status

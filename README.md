@@ -27,11 +27,11 @@ Please see development instructions [here](DEVELOPMENT.md).
 #### 1. Static Scan Mode (Default)
 Scan files and directories for entitlements:
 ```bash
-# Scan default location (/Applications)
+# Scan default locations (/usr/bin and /usr/sbin)
 listent
 
 # Scan specific paths
-listent /usr/bin /Applications
+listent /Applications /System/Applications
 
 # Filter by entitlement patterns
 listent -e "com.apple.security.*"
@@ -45,44 +45,66 @@ listent /usr/bin -e "*security*" --json
 Monitor new processes for entitlements:
 ```bash
 # Monitor all new processes
-listent --monitor
+listent monitor
 
 # Monitor with custom polling interval
-listent --monitor --interval 0.5
+listent monitor --interval 0.5
 
 # Monitor specific entitlements only
-listent --monitor -e "com.apple.security.network.*"
+listent monitor -e "com.apple.security.network.*"
 ```
 
-#### 3. Background Daemon Mode
-Run monitoring as a persistent system service:
+#### 3. Daemon Mode
+Run monitoring continuously in the foreground (useful for testing or manual daemon operation):
+```bash
+# Run as daemon in foreground
+listent daemon run
+
+# Daemon with custom config file
+listent daemon run --config /etc/listent/custom.toml
+```
+
+Query logs with:
+```bash
+# View listent logs in real-time
+log stream --predicate 'subsystem == "com.microsoft.sysinternals.listent"' --level info
+
+# View recent logs
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent"' --last 1h
+
+# Filter for errors only
+log show --predicate 'subsystem == "com.microsoft.sysinternals.listent" AND messageType == error' --last 24h
+```
+
+#### 4. Background Daemon Service
+Run monitoring as a persistent system service managed by launchd:
 ```bash
 # Install and start daemon
-sudo listent install-daemon
+sudo listent daemon install
 
 # Check daemon status
-listent daemon-status
+listent daemon status
 
 # View daemon logs
-listent logs
-listent logs --since 1h
+listent daemon logs
+listent daemon logs --since 1h
 
 # Stop daemon process
-listent daemon-stop
+listent daemon stop
 
 # Uninstall service
-sudo listent uninstall-daemon
+sudo listent daemon uninstall
 ```
 
 ## Examples
 
 ### Static Scanning
 ```bash
-# Basic scan with progress
-listent /Applications
+# Basic scan with progress (uses default /usr/bin and /usr/sbin)
+listent
 
 # Multi-directory scan with filtering
-listent /usr/bin /Applications -e "*security*"
+listent /Applications /System/Applications -e "*security*"
 
 # Find all network-related entitlements
 listent -e "*network*" --json | jq '.results[].entitlements'
@@ -94,32 +116,32 @@ listent /System/Applications --quiet
 ### Process Monitoring
 ```bash
 # Monitor all processes with 2-second intervals
-listent --monitor --interval 2.0
+listent monitor --interval 2.0
 
 # Monitor only security-related entitlements
-listent --monitor -e "com.apple.security.*"
+listent monitor -e "com.apple.security.*"
 
 # Run as daemon with custom config
-listent --daemon --config /etc/listent/daemon.toml
+listent daemon run --config /etc/listent/daemon.toml
 ```
 
 ### Daemon Management
 ```bash
 # Install daemon with default monitoring (requires sudo)
-sudo listent install-daemon
+sudo listent daemon install
 
 # Install with custom configuration file
-sudo listent install-daemon --config /path/to/config.toml
+sudo listent daemon install --config /path/to/config.toml
 
 # View recent daemon activity
-listent logs --since 1h
+listent daemon logs --since 1h
 
 # Check if daemon is running
-listent daemon-status
+listent daemon status
 
 # Stop and remove daemon
-listent daemon-stop
-sudo listent uninstall-daemon
+listent daemon stop
+sudo listent daemon uninstall
 ```
 
 ## Installation
@@ -142,8 +164,8 @@ cargo build --release
 # Show help
 ./target/release/listent --help
 
-# Basic scan
-./target/release/listent /Applications
+# Basic scan (default: /usr/bin and /usr/sbin)
+./target/release/listent
 
 # Show version
 ./target/release/listent --version
@@ -156,9 +178,10 @@ cargo build --release
 - **Entitlement filtering**: `-e "pattern"` supports exact matches and globs (`*`, `?`, `[]`)
 - **Output format**: `--json` or `-j` for structured output, default is human-readable
 - **Quiet mode**: `--quiet` or `-q` suppresses warnings about unreadable files
-- **Monitoring**: `--monitor` or `-m` enables real-time process monitoring
+- **Monitoring**: `listent monitor` subcommand enables real-time process monitoring
 - **Monitor interval**: `--interval SECONDS` sets polling frequency (0.1-300.0, default: 1.0)
-- **Daemon mode**: `--daemon` runs as background service (requires `--monitor`)
+- **Daemon mode**: `listent daemon run` runs as background daemon process
+- **Daemon management**: `listent daemon install|uninstall|status|stop|logs`
 - **Config file**: `--config FILE` or `-c FILE` specifies daemon configuration path
 
 ### Entitlement Patterns
@@ -178,7 +201,7 @@ cargo build --release
 ### Daemon Configuration
 Daemon settings are configured via a TOML configuration file:
 - **Default location**: `~/.config/listent/daemon.toml`
-- **Custom path**: Use `--config` with `install-daemon`
+- **Custom path**: Use `--config` with `daemon install`
 
 To change configuration, edit the config file and restart the daemon:
 ```bash
@@ -186,8 +209,8 @@ To change configuration, edit the config file and restart the daemon:
 nano ~/.config/listent/daemon.toml
 
 # Restart daemon
-listent daemon-stop
-sudo listent install-daemon
+listent daemon stop
+sudo listent daemon install
 ```
 
 Example daemon configuration:
@@ -202,7 +225,7 @@ entitlement_filters = ["com.apple.security.*", "*network*"]
 
 [logging]
 level = "info"
-subsystem = "com.github.mariohewardt.listent"
+subsystem = "com.microsoft.sysinternals.listent"
 category = "daemon"
 ```
 

@@ -527,6 +527,7 @@ dependencies = [
  "oslog",
  "plist",
  "predicates",
+ "rayon",
  "regex",
  "serde",
  "serde_json",

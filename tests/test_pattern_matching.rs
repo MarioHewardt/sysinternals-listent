@@ -73,7 +73,7 @@ fn test_monitor_mode_glob_patterns() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test that monitor mode also supports glob patterns
-    cmd.args(&["--monitor", "-e", "com.apple.security.*", "--interval", "10.0"])
+    cmd.args(&["monitor", "-e", "com.apple.security.*", "--interval", "10.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout causes interrupted status
@@ -85,7 +85,7 @@ fn test_monitor_mode_consistent_exact_matching() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
     // Test that monitor mode uses exact matching, not substring matching
-    cmd.args(&["--monitor", "-e", "network.client", "--interval", "10.0"])
+    cmd.args(&["monitor", "-e", "network.client", "--interval", "10.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
         .interrupted() // Timeout causes interrupted status

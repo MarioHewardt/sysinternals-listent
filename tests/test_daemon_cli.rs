@@ -10,8 +10,8 @@ use predicates::prelude::*;
 fn test_install_daemon_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test basic install-daemon subcommand - will fail due to permissions but should be recognized
-    cmd.arg("install-daemon")
+    // Test basic daemon install subcommand - will fail due to permissions but should be recognized
+    cmd.args(&["daemon", "install"])
        .assert()
        .failure() // Expected to fail due to permission issues (can't write to /Library/LaunchDaemons)
        .stderr(predicate::str::contains("Permission denied").or(
@@ -23,8 +23,8 @@ fn test_install_daemon_subcommand() {
 fn test_install_daemon_with_config() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test install-daemon with custom config path - will fail because config file doesn't exist
-    cmd.args(&["install-daemon", "--config", "/tmp/test-config.toml"])
+    // Test daemon install with custom config path - will fail because config file doesn't exist
+    cmd.args(&["daemon", "install", "--config", "/tmp/test-config.toml"])
        .assert()
        .failure() // Expected to fail because config file doesn't exist
        .stderr(predicate::str::contains("Failed to read config file").or(
@@ -36,9 +36,9 @@ fn test_install_daemon_with_config() {
 fn test_uninstall_daemon_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test uninstall-daemon subcommand - may fail due to permissions if plist exists
+    // Test daemon uninstall subcommand - may fail due to permissions if plist exists
     // or succeed if plist doesn't exist
-    cmd.arg("uninstall-daemon")
+    cmd.args(&["daemon", "uninstall"])
        .assert()
        .stdout(predicate::str::contains("Uninstalling listent daemon service"));
     // Note: Don't assert success/failure since it depends on whether plist exists
@@ -49,8 +49,8 @@ fn test_uninstall_daemon_subcommand() {
 fn test_daemon_status_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test daemon-status subcommand - should work and show status
-    cmd.arg("daemon-status")
+    // Test daemon status subcommand - should work and show status
+    cmd.args(&["daemon", "status"])
        .assert()
        .success() // Should succeed and show status
        .stdout(predicate::str::contains("Checking listent daemon status"));
@@ -60,8 +60,8 @@ fn test_daemon_status_subcommand() {
 fn test_logs_subcommand() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs subcommand - should now work with fixed predicate
-    cmd.arg("logs")
+    // Test daemon logs subcommand - should now work with fixed predicate
+    cmd.args(&["daemon", "logs"])
        .assert()
        .success() // Should succeed with fixed macOS log predicate
        .stdout(predicate::str::contains("Retrieving daemon logs"));
@@ -71,8 +71,8 @@ fn test_logs_subcommand() {
 fn test_logs_with_follow() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs with --follow flag - should now work with fixed predicate
-    cmd.args(&["logs", "--follow"])
+    // Test daemon logs with --follow flag - should now work with fixed predicate
+    cmd.args(&["daemon", "logs", "--follow"])
        .timeout(std::time::Duration::from_millis(500)) // Use timeout since --follow runs indefinitely
        .assert()
        .interrupted() // Should be interrupted by timeout after starting successfully
@@ -83,8 +83,8 @@ fn test_logs_with_follow() {
 fn test_logs_with_since() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test logs with --since flag - should now work with fixed predicate
-    cmd.args(&["logs", "--since", "1h"])
+    // Test daemon logs with --since flag - should now work with fixed predicate
+    cmd.args(&["daemon", "logs", "--since", "1h"])
        .assert()
        .success() // Should succeed with fixed macOS log predicate
        .stdout(predicate::str::contains("Retrieving daemon logs"));
@@ -94,9 +94,9 @@ fn test_logs_with_since() {
 fn test_daemon_flag_compatibility() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test that --daemon flag works (implies --monitor)
+    // Test that daemon run subcommand works (runs monitoring in daemon mode)
     // The daemon will start running and be interrupted by our timeout
-    cmd.args(&["--daemon"])
+    cmd.args(&["daemon", "run"])
        .timeout(std::time::Duration::from_secs(2))
        .assert()
        .interrupted(); // Daemon starts successfully and runs until timeout
@@ -106,11 +106,11 @@ fn test_daemon_flag_compatibility() {
 fn test_help_shows_daemon_subcommands() {
     let mut cmd = Command::cargo_bin("listent").unwrap();
     
-    // Test that help output includes daemon subcommands
+    // Test that help output includes daemon subcommand
     cmd.arg("--help")
        .assert()
        .success()
-       .stdout(predicate::str::contains("install-daemon").or(
+       .stdout(predicate::str::contains("daemon").or(
            predicate::str::contains("SUBCOMMANDS").or(
                predicate::str::contains("Commands") // Different help format
            )
