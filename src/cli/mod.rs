@@ -77,6 +77,15 @@ pub enum Commands {
 
     /// Daemon management commands
     #[command(about = "Background daemon operations")]
+    #[command(after_help = "Examples:
+  listent daemon install                 Install and start daemon service
+  listent daemon install --config FILE   Install with custom config
+  listent daemon status                  Check if daemon is running
+  listent daemon logs                    View logs from last hour
+  listent daemon logs --since 24h        View logs from last 24 hours
+  listent daemon logs -f                 Follow logs in real-time
+  listent daemon stop                    Stop daemon process
+  listent daemon uninstall               Remove daemon service")]
     Daemon {
         #[command(subcommand)]
         action: DaemonCommands,
@@ -207,11 +216,6 @@ pub fn parse_monitor_config(
         output_json: json,
         quiet_mode: quiet,
     })
-}
-
-/// Parse raw command line arguments without processing
-pub fn parse_args_raw() -> Result<Args> {
-    Ok(Args::parse())
 }
 
 /// Get execution mode based on CLI arguments

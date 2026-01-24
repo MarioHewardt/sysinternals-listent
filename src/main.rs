@@ -583,10 +583,96 @@ fn stop_daemon_process() -> Result<()> {
 }
 
 /// Show daemon logs
-fn show_daemon_logs(_follow: bool, since: Option<String>, format: String) -> Result<()> {
+fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Result<()> {
     use crate::daemon::logging::get_daemon_logs;
+    use std::process::{Command, Stdio};
+    use std::io::{BufRead, BufReader};
 
-    // Note: `follow` parameter reserved for future log streaming implementation
+    // Helper to format a log line for human-readable output
+    let format_human_line = |line: &str| -> Option<String> {
+        // Try to extract JSON from the log line (after the | separator)
+        if let Some(json_start) = line.find(" | {") {
+            let json_part = &line[json_start + 3..];
+            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(json_part) {
+                let path = entry.get("executable_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+                let pid = entry.get("pid")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(0);
+                
+                // Extract entitlement names
+                let entitlements: Vec<&str> = entry.get("entitlements")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| arr.iter()
+                        .filter_map(|e| e.as_str())
+                        .collect())
+                    .unwrap_or_default();
+                
+                // Extract timestamp from beginning of log line
+                let timestamp = if line.len() > 23 { &line[..23] } else { "unknown" };
+                
+                let ent_list = if entitlements.is_empty() {
+                    "none".to_string()
+                } else {
+                    entitlements.join(", ")
+                };
+                
+                return Some(format!("[{}] {} (PID: {})\n    Entitlements: {}", 
+                    timestamp, path, pid, ent_list));
+            }
+        }
+        None
+    };
+
+    // Handle follow mode with log stream
+    if follow {
+        println!("📄 Following daemon logs (Ctrl+C to stop)...");
+        
+        let mut cmd = Command::new("log")
+            .args([
+                "stream",
+                "--predicate",
+                &format!("subsystem == \"{}\"", APP_SUBSYSTEM),
+                "--style",
+                "compact",
+            ])
+            .stdout(Stdio::piped())
+            .spawn()
+            .context("Failed to start log stream")?;
+
+        let stdout = cmd.stdout.take().context("Failed to capture stdout")?;
+        let reader = BufReader::new(stdout);
+
+        for line in reader.lines() {
+            match line {
+                Ok(l) => {
+                    if l.trim().is_empty() || l.starts_with("Filtering") || l.starts_with("Timestamp") {
+                        continue;
+                    }
+                    
+                    if format == "json" {
+                        // Extract just the JSON part
+                        if let Some(json_start) = l.find(" | {") {
+                            println!("{}", &l[json_start + 3..]);
+                        } else {
+                            println!("{}", l);
+                        }
+                    } else {
+                        // Human-readable format
+                        if let Some(formatted) = format_human_line(&l) {
+                            println!("{}", formatted);
+                        } else {
+                            println!("{}", l);
+                        }
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+
+        return Ok(());
+    }
     
     println!("📄 Retrieving daemon logs...");
 
@@ -598,7 +684,7 @@ fn show_daemon_logs(_follow: bool, since: Option<String>, format: String) -> Res
     // Retrieve logs from ULS
     let logs = get_daemon_logs(
         APP_SUBSYSTEM,
-        since.as_deref().unwrap_or("1m"),
+        since.as_deref().unwrap_or("1h"),
     )?;
 
     if logs.is_empty() {
@@ -614,21 +700,18 @@ fn show_daemon_logs(_follow: bool, since: Option<String>, format: String) -> Res
     match format.as_str() {
         "json" => {
             for log_line in &logs {
-                println!("{}", log_line);
+                // Extract just the JSON part
+                if let Some(json_start) = log_line.find(" | {") {
+                    println!("{}", &log_line[json_start + 3..]);
+                } else {
+                    println!("{}", log_line);
+                }
             }
         },
         "human" => {
             for log_line in &logs {
-                // Parse JSON and format for human readability
-                if let Ok(log_entry) = serde_json::from_str::<serde_json::Value>(log_line) {
-                    if let Some(timestamp) = log_entry.get("timestamp") {
-                        print!("[{}] ", timestamp.as_str().unwrap_or("unknown"));
-                    }
-                    if let Some(message) = log_entry.get("message") {
-                        println!("{}", message.as_str().unwrap_or(log_line));
-                    } else {
-                        println!("{}", log_line);
-                    }
+                if let Some(formatted) = format_human_line(log_line) {
+                    println!("{}", formatted);
                 } else {
                     println!("{}", log_line);
                 }

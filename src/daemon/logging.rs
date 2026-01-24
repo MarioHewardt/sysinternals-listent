@@ -153,6 +153,7 @@ pub fn get_daemon_logs(subsystem: &str, since: &str) -> Result<Vec<String>> {
     Ok(output_str
         .lines()
         .filter(|line| !line.trim().is_empty())
+        .filter(|line| !line.starts_with("Timestamp")) // Skip header line
         .map(|line| line.to_string())
         .collect())
 }
