@@ -94,7 +94,7 @@ impl DaemonConfiguration {
                 path_filters: vec![
                     PathBuf::from("/Applications"),
                     PathBuf::from("/usr/bin"),
-                    PathBuf::from("/bin"),
+                    PathBuf::from("/usr/sbin"),
                 ],
                 entitlement_filters: vec![], // Monitor all entitlements by default
             },

@@ -16,14 +16,30 @@ use std::sync::Arc;
 use rayon::prelude::*;
 use crate::constants::APP_SUBSYSTEM;
 
-fn main() -> Result<()> {
+fn main() {
     // Determine execution mode from CLI arguments
-    match cli::get_execution_mode()? {
-        cli::ExecutionMode::Scan => run_scan_mode(),
-        cli::ExecutionMode::Monitor { path, entitlement, interval, json, quiet } => {
-            run_monitor_mode(path, entitlement, interval, json, quiet)
+    let result = (|| -> Result<()> {
+        match cli::get_execution_mode()? {
+            cli::ExecutionMode::Scan => run_scan_mode(),
+            cli::ExecutionMode::Monitor { path, entitlement, interval, json, quiet } => {
+                run_monitor_mode(path, entitlement, interval, json, quiet)
+            }
+            cli::ExecutionMode::Daemon(action) => run_daemon_command(action),
         }
-        cli::ExecutionMode::Daemon(action) => run_daemon_command(action),
+    })();
+
+    if let Err(e) = result {
+        // Print the error first
+        eprintln!("Error: {:?}", e);
+
+        // Then check for permission denied and show hint
+        let err_string = format!("{:?}", e);
+        if err_string.contains("os error 13") || err_string.contains("Permission denied") {
+            eprintln!("\n💡 Hint: Some paths require elevated privileges. Try:");
+            eprintln!("   sudo listent [PATH...]");
+        }
+
+        std::process::exit(1);
     }
 }
 
@@ -249,7 +265,17 @@ fn run_monitor_mode(
 }
 
 fn run_daemon_command(action: cli::DaemonCommands) -> Result<()> {
-    match action {
+    // Get command name before moving action
+    let cmd_name = match &action {
+        cli::DaemonCommands::Install { .. } => "install",
+        cli::DaemonCommands::Uninstall => "uninstall",
+        cli::DaemonCommands::Run { .. } => "run",
+        cli::DaemonCommands::Stop => "stop",
+        cli::DaemonCommands::Status => "status",
+        cli::DaemonCommands::Logs { .. } => "logs",
+    };
+
+    let result = match action {
         cli::DaemonCommands::Run { config } => {
             run_daemon_mode(config)
         }
@@ -268,7 +294,18 @@ fn run_daemon_command(action: cli::DaemonCommands) -> Result<()> {
         cli::DaemonCommands::Logs { follow, since, format } => {
             show_daemon_logs(follow, since, format)
         }
+    };
+
+    // Check for permission denied errors and suggest sudo
+    if let Err(ref e) = result {
+        let err_string = format!("{:?}", e);
+        if err_string.contains("os error 13") || err_string.contains("Permission denied") {
+            eprintln!("\n💡 Hint: This operation requires root privileges. Try:");
+            eprintln!("   sudo listent daemon {}", cmd_name);
+        }
     }
+
+    result
 }
 
 fn run_daemon_mode(config: Option<std::path::PathBuf>) -> Result<()> {

@@ -76,7 +76,7 @@ impl DaemonLogger {
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
 
-        self.log_structured(LogLevel::Info, &format!("New process detected: {}", process_name), &message)
+        self.log_structured(LogLevel::Info, &format!("New process detected: {}", executable_path), &message)
     }
 
     /// Log error events
