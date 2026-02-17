@@ -1,5 +1,5 @@
 //! CLI argument parsing and validation module
-//! 
+//!
 //! Handles command-line interface using clap, including:
 //! - Scan mode (default): scan files/directories for entitlements
 //! - Monitor subcommand: real-time process monitoring
@@ -8,17 +8,12 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use anyhow::{Result, anyhow, Context};
+use crate::constants::{DEFAULT_SCAN_PATHS, DEFAULT_POLLING_INTERVAL_STR, POLLING_INTERVAL_MIN, POLLING_INTERVAL_MAX};
 use crate::models::{ScanConfig, ScanFilters, PollingConfiguration, MonitorError};
 use std::time::Duration;
 
-/// Default directories to scan if no paths are provided
-const DEFAULT_SCAN_PATHS: &[&str] = &[
-    "/usr/bin",
-    "/usr/sbin",
-];
-
 /// Command line arguments for listent
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(author, version, about, disable_help_subcommand = true)]
 #[command(after_help = "Examples:
   listent                                      Scan default paths (/usr/bin, /usr/sbin)
@@ -63,7 +58,7 @@ pub enum Commands {
         entitlement: Vec<String>,
 
         /// Polling interval in seconds (0.1 - 300.0)
-        #[arg(short, long, default_value = "1.0", value_name = "SECONDS")]
+        #[arg(short, long, default_value = DEFAULT_POLLING_INTERVAL_STR, value_name = "SECONDS")]
         interval: f64,
 
         /// Output in JSON format
@@ -141,12 +136,10 @@ pub enum DaemonCommands {
 }
 
 /// Parse command line arguments and return scan configuration
-pub fn parse_args() -> Result<ScanConfig> {
-    let args = Args::parse();
-    
+pub fn parse_args_from(args: Args) -> Result<ScanConfig> {
     // This function is only for scan mode (no subcommand)
     if args.command.is_some() {
-        return Err(anyhow!("Internal error: parse_args() called with subcommand"));
+        return Err(anyhow!("Internal error: parse_args called with subcommand"));
     }
 
     // Validate paths if provided
@@ -190,7 +183,7 @@ pub fn parse_monitor_config(
     quiet: bool,
 ) -> Result<PollingConfiguration> {
     // Validate interval range
-    if interval < 0.1 || interval > 300.0 {
+    if interval < POLLING_INTERVAL_MIN || interval > POLLING_INTERVAL_MAX {
         return Err(MonitorError::InvalidInterval(interval).into());
     }
 
@@ -221,7 +214,7 @@ pub fn parse_monitor_config(
 /// Get execution mode based on CLI arguments
 pub fn get_execution_mode() -> Result<ExecutionMode> {
     let args = Args::parse();
-    
+
     match args.command {
         Some(Commands::Monitor { path, entitlement, interval, json, quiet }) => {
             Ok(ExecutionMode::Monitor { path, entitlement, interval, json, quiet })
@@ -230,8 +223,8 @@ pub fn get_execution_mode() -> Result<ExecutionMode> {
             Ok(ExecutionMode::Daemon(action))
         }
         None => {
-            // Default: scan mode
-            Ok(ExecutionMode::Scan)
+            // Default: scan mode — pass parsed args to avoid re-parsing
+            Ok(ExecutionMode::Scan(args))
         }
     }
 }
@@ -239,7 +232,8 @@ pub fn get_execution_mode() -> Result<ExecutionMode> {
 /// Execution modes for the application
 #[derive(Debug)]
 pub enum ExecutionMode {
-    Scan,
+    /// Scan mode with pre-parsed CLI args
+    Scan(Args),
     Monitor {
         path: Vec<PathBuf>,
         entitlement: Vec<String>,

@@ -1,8 +1,7 @@
-//! Optimized entitlement extraction for better performance
+//! Optimized entitlement extraction using the plist crate
 //!
-//! This module provides performance optimizations over the basic codesign approach:
-//! - Uses proper plist parsing instead of manual XML parsing
-//! - Optimized command execution with reduced allocations
+//! This module provides more reliable entitlement parsing than the fallback:
+//! - Uses the plist crate for proper binary/XML plist parsing
 //! - Better error handling for edge cases
 
 use std::collections::HashMap;
@@ -10,31 +9,29 @@ use std::path::Path;
 use std::process::Command;
 use anyhow::{Result, anyhow};
 use serde_json::Value;
+use crate::constants::{CODESIGN_COMMAND, CODESIGN_ENTITLEMENT_ARGS};
 
 /// Extract entitlements using optimized codesign with proper plist parsing
 pub fn extract_entitlements_optimized(binary_path: &Path) -> Result<HashMap<String, Value>> {
     // Call codesign to extract entitlements in plist format
-    let output = Command::new("codesign")
-        .arg("-d")
-        .arg("--entitlements")
-        .arg("-") 
-        .arg("--xml")
+    let output = Command::new(CODESIGN_COMMAND)
+        .args(CODESIGN_ENTITLEMENT_ARGS)
         .arg(binary_path)
         .output()?;
-    
+
     if !output.status.success() {
         // Binary might not be signed or might not have entitlements
         return Ok(HashMap::new());
     }
-    
+
     if output.stdout.is_empty() {
         return Ok(HashMap::new());
     }
-    
+
     // Parse the plist XML using the plist crate for better performance and reliability
     let plist_value: plist::Value = plist::from_bytes(&output.stdout)
         .map_err(|e| anyhow!("Failed to parse entitlements plist: {}", e))?;
-    
+
     // Convert plist value to JSON-compatible HashMap
     plist_to_json_map(plist_value)
 }
@@ -92,8 +89,8 @@ fn plist_value_to_json_value(plist_value: plist::Value) -> Result<Value> {
             Ok(Value::Object(json_obj))
         }
         plist::Value::Data(data) => {
-            // Convert binary data to base64 string
-            Ok(Value::String(base64_encode(&data)))
+            // Convert binary data to hex string for display
+            Ok(Value::String(hex_encode(&data)))
         }
         plist::Value::Date(date) => {
             // Convert date to string representation
@@ -110,10 +107,8 @@ fn plist_value_to_json_value(plist_value: plist::Value) -> Result<Value> {
     }
 }
 
-/// Simple base64 encoding without extra dependencies
-fn base64_encode(data: &[u8]) -> String {
-    // For now, just represent as hex string to avoid adding another dependency
-    // This is rarely needed for entitlements
+/// Encode binary data as a hex string for display
+fn hex_encode(data: &[u8]) -> String {
     format!("0x{}", data.iter().map(|b| format!("{:02x}", b)).collect::<String>())
 }
 
@@ -149,7 +144,7 @@ mod tests {
         // Test with our own binary (likely unsigned in debug builds)
         let current_exe = std::env::current_exe().expect("Could not get current executable");
         let result = extract_entitlements_optimized(&current_exe);
-        
+
         // Should succeed but might return empty entitlements for unsigned binaries
         assert!(result.is_ok(), "Optimized extraction should handle unsigned binaries gracefully");
     }

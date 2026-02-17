@@ -1,17 +1,17 @@
 use crate::models::{MonitoredProcess, PollingConfiguration, ProcessSnapshot};
-use crate::monitor::{ProcessTracker, init_logger};
+use crate::monitor::ProcessTracker;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime};
-use sysinfo::{System, SystemExt, ProcessExt, PidExt};
+use sysinfo::{ProcessesToUpdate, System};
 
 /// Start monitoring processes with external interrupt flag (called from main.rs)
 pub fn start_monitoring_with_interrupt(config: PollingConfiguration, interrupted: Arc<AtomicBool>) -> Result<()> {
     // Convert interrupted (false = continue) to running (true = continue)
     let running = Arc::new(AtomicBool::new(true));
-    
+
     // Create a thread to monitor the interrupted flag and update running
     let running_monitor = running.clone();
     std::thread::spawn(move || {
@@ -27,28 +27,21 @@ pub fn start_monitoring_with_interrupt(config: PollingConfiguration, interrupted
 /// Internal monitoring implementation
 fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBool>) -> Result<()> {
 
-    // Initialize unified logging
-    let _logger = init_logger().ok(); // Graceful degradation if logging fails
-
     // Initialize process tracker and system info
     let mut tracker = ProcessTracker::new();
     let mut system = System::new_all();
-    
-    // Pre-allocate collections to reduce allocations in the loop
-    let mut new_processes = Vec::new();
-    let mut filtered_processes = Vec::new();
 
     if !config.quiet_mode {
         println!("Starting process monitoring (interval: {:.1}s)...", config.interval.as_secs_f64());
         if !config.path_filters.is_empty() {
-            println!("Monitoring {} for processes", 
+            println!("Monitoring {} for processes",
                 config.path_filters.iter()
                     .map(|p| p.display().to_string())
                     .collect::<Vec<_>>()
                     .join(", "));
         }
         if !config.entitlement_filters.is_empty() {
-            println!("Monitoring for processes with entitlement: {}", 
+            println!("Monitoring for processes with entitlement: {}",
                 config.entitlement_filters.join(", "));
         }
         println!("Press Ctrl+C to stop monitoring.");
@@ -59,26 +52,22 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
         let cycle_start = Instant::now();
 
         // Refresh system information (only processes, not all system info)
-        system.refresh_processes();
+        system.refresh_processes(ProcessesToUpdate::All, true);
 
         // Create snapshot of current processes
         let snapshot = create_process_snapshot(&system)?;
 
-        // Detect new processes (reuse vector to avoid allocations)
-        new_processes.clear();
-        let mut new_procs = tracker.detect_new_processes(snapshot);
-        
-        // Extract entitlements only for new processes (performance optimization)
-        for process in &mut new_procs {
-            process.entitlements = extract_process_entitlements(&process.executable_path)
-                .unwrap_or_else(|_| Vec::new());
-        }
-        
-        new_processes.extend(new_procs);
+        // Detect new processes
+        let mut new_processes = tracker.detect_new_processes(snapshot);
 
-        // Apply filters (reuse vector to avoid allocations) 
-        filtered_processes.clear();
-        filtered_processes.extend(apply_filters(new_processes.drain(..).collect(), &config)?);
+        // Extract entitlements only for new processes
+        for process in &mut new_processes {
+            process.entitlements = extract_process_entitlements(&process.executable_path)
+                .unwrap_or_default();
+        }
+
+        // Apply filters
+        let filtered_processes = apply_filters(new_processes, &config);
 
         // Output detected processes
         for process in &filtered_processes {
@@ -102,23 +91,30 @@ fn start_monitoring_internal(config: PollingConfiguration, running: Arc<AtomicBo
 fn create_process_snapshot(system: &System) -> Result<ProcessSnapshot> {
     let timestamp = SystemTime::now();
     let scan_start = Instant::now();
-    
+
     let mut processes = HashMap::new();
 
     for (pid, process) in system.processes() {
         // Extract basic process information only (entitlements extracted later for new processes)
-        let name = process.name().to_string();
-        let executable_path = process.exe().to_path_buf();
+        let name = process.name().to_string_lossy().to_string();
+        let executable_path = match process.exe() {
+            Some(path) => path.to_path_buf(),
+            None => continue, // Skip processes without a known executable
+        };
+
+        let start_time = process.start_time();
+        let pid_u32 = pid.as_u32();
 
         let monitored_process = MonitoredProcess {
-            pid: pid.as_u32(),
+            pid: pid_u32,
+            start_time,
             name,
             executable_path,
-            entitlements: vec![], // Will be populated later for new processes only
+            entitlements: HashMap::new(), // Will be populated later for new processes only
             discovery_timestamp: timestamp,
         };
 
-        processes.insert(pid.as_u32(), monitored_process);
+        processes.insert((pid_u32, start_time), monitored_process);
     }
 
     Ok(ProcessSnapshot {
@@ -128,86 +124,35 @@ fn create_process_snapshot(system: &System) -> Result<ProcessSnapshot> {
     })
 }
 
-fn extract_process_entitlements(executable_path: &std::path::Path) -> Result<Vec<String>> {
-    // Reuse existing entitlement extraction logic
-    match crate::entitlements::extract_entitlements(executable_path) {
-        Ok(entitlements_map) => Ok(entitlements_map.keys().cloned().collect()),
-        Err(e) => Err(e),
-    }
+fn extract_process_entitlements(executable_path: &std::path::Path) -> Result<HashMap<String, serde_json::Value>> {
+    crate::entitlements::extract_entitlements(executable_path)
 }
 
 fn apply_filters(
     processes: Vec<MonitoredProcess>,
     config: &PollingConfiguration,
-) -> Result<Vec<MonitoredProcess>> {
-    let mut filtered = processes;
-
+) -> Vec<MonitoredProcess> {
     // Filter out processes with no entitlements (reduce noise)
-    filtered = filtered
+    let filtered: Vec<_> = processes
         .into_iter()
         .filter(|process| !process.entitlements.is_empty())
         .collect();
 
     // Apply path filters
-    filtered = ProcessTracker::apply_path_filters(filtered, &config.path_filters);
+    let filtered = ProcessTracker::apply_path_filters(filtered, &config.path_filters);
 
     // Apply entitlement filters
-    filtered = ProcessTracker::apply_entitlement_filters(filtered, &config.entitlement_filters);
-
-    Ok(filtered)
+    ProcessTracker::apply_entitlement_filters(filtered, &config.entitlement_filters)
 }
 
 fn output_process_detection(process: &MonitoredProcess, config: &PollingConfiguration) -> Result<()> {
+    let event = crate::output::create_detection_event(process)?;
     if config.output_json {
-        output_json_format(process)?;
+        println!("{}", crate::output::format_event_json(&event)?);
     } else {
-        output_human_format(process)?;
+        println!("{}", crate::output::format_event_human(&event));
+        println!();
     }
-
-    // Note: Unified logging is disabled for interactive monitoring to avoid duplicate output.
-    // When daemon mode is implemented, unified logging will be used there instead.
-    
-    Ok(())
-}
-
-fn output_human_format(process: &MonitoredProcess) -> Result<()> {
-    use time::OffsetDateTime;
-    
-    let timestamp = OffsetDateTime::from(process.discovery_timestamp);
-    let timestamp_str = timestamp.format(&time::format_description::well_known::Iso8601::DEFAULT)?;
-
-    println!("[{}] New process detected: {} (PID: {})", 
-        timestamp_str, process.name, process.pid);
-    println!("  Path: {}", process.executable_path.display());
-    
-    if process.entitlements.is_empty() {
-        println!("  Entitlements: (none)");
-    } else {
-        println!("  Entitlements: {}", process.entitlements.join(", "));
-    }
-    println!();
-
-    Ok(())
-}
-
-fn output_json_format(process: &MonitoredProcess) -> Result<()> {
-    use time::OffsetDateTime;
-    
-    let timestamp = OffsetDateTime::from(process.discovery_timestamp);
-    let timestamp_str = timestamp.format(&time::format_description::well_known::Iso8601::DEFAULT)?;
-
-    let json_output = serde_json::json!({
-        "timestamp": timestamp_str,
-        "event_type": "process_detected",
-        "process": {
-            "pid": process.pid,
-            "name": process.name,
-            "path": process.executable_path.display().to_string(),
-            "entitlements": process.entitlements
-        }
-    });
-
-    println!("{}", json_output);
     Ok(())
 }
 
@@ -218,17 +163,22 @@ mod tests {
 
     // ==================== create_process_snapshot tests ====================
 
+    /// Helper to create an entitlements HashMap from key strings (all set to true)
+    fn ents(keys: &[&str]) -> HashMap<String, serde_json::Value> {
+        keys.iter().map(|k| (k.to_string(), serde_json::Value::Bool(true))).collect()
+    }
+
     #[test]
     fn test_create_process_snapshot_returns_valid_snapshot() {
         let system = System::new_all();
         let snapshot = create_process_snapshot(&system).unwrap();
-        
+
         // Should have at least the current process
         assert!(!snapshot.processes.is_empty(), "Snapshot should contain at least one process");
-        
+
         // Timestamp should be set
         assert!(snapshot.timestamp <= SystemTime::now());
-        
+
         // Scan duration should be reasonable (less than 10 seconds)
         assert!(snapshot.scan_duration.as_secs() < 10);
     }
@@ -237,12 +187,12 @@ mod tests {
     fn test_create_process_snapshot_includes_current_process() {
         let system = System::new_all();
         let snapshot = create_process_snapshot(&system).unwrap();
-        
+
         let current_pid = std::process::id();
-        
-        // Current process should be in the snapshot
+
+        // Current process should be in the snapshot (check by PID component of the composite key)
         assert!(
-            snapshot.processes.contains_key(&current_pid),
+            snapshot.processes.values().any(|p| p.pid == current_pid),
             "Snapshot should include current process (PID {})", current_pid
         );
     }
@@ -251,12 +201,12 @@ mod tests {
     fn test_process_snapshot_has_valid_executable_paths() {
         let system = System::new_all();
         let snapshot = create_process_snapshot(&system).unwrap();
-        
+
         // At least some processes should have non-empty executable paths
         let processes_with_paths = snapshot.processes.values()
             .filter(|p| !p.executable_path.as_os_str().is_empty())
             .count();
-        
+
         assert!(
             processes_with_paths > 0,
             "At least some processes should have executable paths"
@@ -269,7 +219,7 @@ mod tests {
     fn test_extract_process_entitlements_nonexistent_file() {
         let path = PathBuf::from("/nonexistent/binary");
         let result = extract_process_entitlements(&path);
-        
+
         // Should either succeed with empty vec or return an error
         // Either way, it shouldn't panic
         match result {
@@ -296,16 +246,18 @@ mod tests {
         let processes = vec![
             MonitoredProcess {
                 pid: 1,
+                start_time: 0,
                 name: "test1".to_string(),
                 executable_path: PathBuf::from("/bin/test1"),
-                entitlements: vec![], // No entitlements
+                entitlements: ents(&[]), // No entitlements
                 discovery_timestamp: SystemTime::now(),
             },
             MonitoredProcess {
                 pid: 2,
+                start_time: 0,
                 name: "test2".to_string(),
                 executable_path: PathBuf::from("/bin/test2"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
         ];
@@ -318,8 +270,8 @@ mod tests {
             quiet_mode: false,
         };
 
-        let filtered = apply_filters(processes, &config).unwrap();
-        
+        let filtered = apply_filters(processes, &config);
+
         // Should only keep process with entitlements
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].pid, 2);
@@ -330,16 +282,18 @@ mod tests {
         let processes = vec![
             MonitoredProcess {
                 pid: 1,
+                start_time: 0,
                 name: "test1".to_string(),
                 executable_path: PathBuf::from("/Applications/Test.app/test1"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
             MonitoredProcess {
                 pid: 2,
+                start_time: 0,
                 name: "test2".to_string(),
                 executable_path: PathBuf::from("/usr/bin/test2"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
         ];
@@ -352,8 +306,8 @@ mod tests {
             quiet_mode: false,
         };
 
-        let filtered = apply_filters(processes, &config).unwrap();
-        
+        let filtered = apply_filters(processes, &config);
+
         // Should only keep process in /Applications
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].pid, 1);
@@ -364,16 +318,18 @@ mod tests {
         let processes = vec![
             MonitoredProcess {
                 pid: 1,
+                start_time: 0,
                 name: "test1".to_string(),
                 executable_path: PathBuf::from("/bin/test1"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
             MonitoredProcess {
                 pid: 2,
+                start_time: 0,
                 name: "test2".to_string(),
                 executable_path: PathBuf::from("/bin/test2"),
-                entitlements: vec!["com.apple.security.network.client".to_string()],
+                entitlements: ents(&["com.apple.security.network.client"]),
                 discovery_timestamp: SystemTime::now(),
             },
         ];
@@ -386,8 +342,8 @@ mod tests {
             quiet_mode: false,
         };
 
-        let filtered = apply_filters(processes, &config).unwrap();
-        
+        let filtered = apply_filters(processes, &config);
+
         // Should only keep process with sandbox entitlement
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].pid, 1);
@@ -398,23 +354,26 @@ mod tests {
         let processes = vec![
             MonitoredProcess {
                 pid: 1,
+                start_time: 0,
                 name: "test1".to_string(),
                 executable_path: PathBuf::from("/Applications/Test.app/test1"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
             MonitoredProcess {
                 pid: 2,
+                start_time: 0,
                 name: "test2".to_string(),
                 executable_path: PathBuf::from("/Applications/Other.app/test2"),
-                entitlements: vec!["com.apple.security.network.client".to_string()],
+                entitlements: ents(&["com.apple.security.network.client"]),
                 discovery_timestamp: SystemTime::now(),
             },
             MonitoredProcess {
                 pid: 3,
+                start_time: 0,
                 name: "test3".to_string(),
                 executable_path: PathBuf::from("/usr/bin/test3"),
-                entitlements: vec!["com.apple.security.app-sandbox".to_string()],
+                entitlements: ents(&["com.apple.security.app-sandbox"]),
                 discovery_timestamp: SystemTime::now(),
             },
         ];
@@ -427,8 +386,8 @@ mod tests {
             quiet_mode: false,
         };
 
-        let filtered = apply_filters(processes, &config).unwrap();
-        
+        let filtered = apply_filters(processes, &config);
+
         // Should only keep process matching both filters
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].pid, 1);
@@ -446,7 +405,7 @@ mod tests {
             quiet_mode: false,
         };
 
-        let filtered = apply_filters(processes, &config).unwrap();
+        let filtered = apply_filters(processes, &config);
         assert!(filtered.is_empty());
     }
 
@@ -479,12 +438,12 @@ mod tests {
     fn test_snapshot_contains_process_names() {
         let system = System::new_all();
         let snapshot = create_process_snapshot(&system).unwrap();
-        
+
         // At least some processes should have non-empty names
         let processes_with_names = snapshot.processes.values()
             .filter(|p| !p.name.is_empty())
             .count();
-        
+
         assert!(
             processes_with_names > 0,
             "At least some processes should have names"
@@ -495,7 +454,7 @@ mod tests {
     fn test_snapshot_scan_duration_is_positive() {
         let system = System::new_all();
         let snapshot = create_process_snapshot(&system).unwrap();
-        
+
         // Scan duration should be set (we did actual work)
         // The duration object exists and can be accessed
         let _ = snapshot.scan_duration.as_nanos();

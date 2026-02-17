@@ -3,10 +3,8 @@
 //! Defines core data structures:
 //! - BinaryRecord: Discovered executable metadata
 //! - EntitlementSet: Parsed entitlement key-value pairs
-//! - ScanResult: Successful entitlement enumeration 
+//! - ScanResult: Successful entitlement enumeration
 //! - ScanSummary: Aggregated scan statistics
-//!
-//! Implements invariants and validation rules per data-model.md
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -69,8 +67,6 @@ pub struct ScanConfig {
     pub quiet_mode: bool,
 }
 
-// TODO: Implement data structures per data-model.md specification
-
 //
 // Monitor-specific data structures (T012-T015)
 //
@@ -80,12 +76,15 @@ pub struct ScanConfig {
 pub struct MonitoredProcess {
     /// Process ID (PID)
     pub pid: u32,
+    /// Process start time as Unix timestamp (seconds since epoch).
+    /// Combined with PID, this uniquely identifies a process even across PID reuse.
+    pub start_time: u64,
     /// Process name (executable name)
     pub name: String,
     /// Full path to the executable
     pub executable_path: PathBuf,
-    /// Entitlements found in the process executable
-    pub entitlements: Vec<String>,
+    /// Entitlements found in the process executable (key-value pairs)
+    pub entitlements: HashMap<String, serde_json::Value>,
     /// Timestamp when this process was first discovered
     pub discovery_timestamp: SystemTime,
 }
@@ -108,12 +107,13 @@ pub struct PollingConfiguration {
 /// Snapshot of process state at a given moment
 #[derive(Debug, Clone)]
 pub struct ProcessSnapshot {
-    /// HashMap of PID -> MonitoredProcess for O(1) lookups
-    pub processes: HashMap<u32, MonitoredProcess>,
-    /// Timestamp of this snapshot (used for logging)
+    /// HashMap of (PID, start_time) -> MonitoredProcess for O(1) lookups.
+    /// Using (PID, start_time) as key ensures PID reuse is detected as a new process.
+    pub processes: HashMap<(u32, u64), MonitoredProcess>,
+    /// Timestamp of this snapshot
     #[allow(dead_code)]
     pub timestamp: SystemTime,
-    /// Duration taken to create this snapshot (used for performance tracking)
+    /// Duration taken to create this snapshot
     #[allow(dead_code)]
     pub scan_duration: Duration,
 }
@@ -121,17 +121,40 @@ pub struct ProcessSnapshot {
 /// Custom error types for monitoring operations
 #[derive(Debug, thiserror::Error)]
 pub enum MonitorError {
+    /// Note: bounds must match POLLING_INTERVAL_MIN/MAX in constants.rs
     #[error("Invalid polling interval: {0}. Must be between 0.1 and 300.0 seconds")]
     InvalidInterval(f64),
 }
 
+/// Canonical event structure for process detection output.
+/// Used by monitor stdout, daemon ULS logging, and daemon log viewer
+/// to ensure consistent JSON schema and human-readable formatting.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessDetectionEvent {
+    /// ISO 8601 timestamp of when the process was detected
+    pub timestamp: String,
+    /// Event type identifier
+    pub event_type: String,
+    /// Process ID
+    pub pid: u32,
+    /// Process name (executable name)
+    pub name: String,
+    /// Full path to the executable
+    pub path: String,
+    /// Entitlement count for quick reference
+    pub entitlement_count: usize,
+    /// Entitlements as a list of key names
+    pub entitlements: Vec<String>,
+}
+
 impl ProcessSnapshot {
-    /// Returns processes that are in this snapshot but not in the previous one
+    /// Returns processes that are in this snapshot but not in the previous one.
+    /// Comparison uses (PID, start_time) keys to handle PID reuse correctly.
     pub fn new_processes(&self, previous: &ProcessSnapshot) -> Vec<MonitoredProcess> {
         self.processes
-            .values()
-            .filter(|process| !previous.processes.contains_key(&process.pid))
-            .cloned()
+            .iter()
+            .filter(|(key, _)| !previous.processes.contains_key(key))
+            .map(|(_, process)| process.clone())
             .collect()
     }
 }

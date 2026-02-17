@@ -12,12 +12,13 @@ use std::path::Path;
 use std::process::Command;
 use anyhow::{Result, anyhow};
 use serde_json::Value;
+use crate::constants::{CODESIGN_COMMAND, CODESIGN_ENTITLEMENT_ARGS};
 
 pub mod pattern_matcher;
 pub mod native;
 
 /// Extract entitlements from a binary file
-/// 
+///
 /// Uses optimized plist parsing for better performance,
 /// with fallback to manual XML parsing if needed.
 pub fn extract_entitlements(binary_path: &Path) -> Result<HashMap<String, Value>> {
@@ -29,7 +30,7 @@ pub fn extract_entitlements(binary_path: &Path) -> Result<HashMap<String, Value>
             // This provides compatibility for edge cases
         }
     }
-    
+
     // Fallback to manual XML parsing (original implementation)
     extract_entitlements_codesign(binary_path)
 }
@@ -37,21 +38,18 @@ pub fn extract_entitlements(binary_path: &Path) -> Result<HashMap<String, Value>
 /// Extract entitlements using codesign command-line tool (fallback method)
 pub fn extract_entitlements_codesign(binary_path: &Path) -> Result<HashMap<String, Value>> {
     // Call codesign to extract entitlements
-    let output = Command::new("codesign")
-        .arg("-d")
-        .arg("--entitlements")
-        .arg("-")
-        .arg("--xml")
+    let output = Command::new(CODESIGN_COMMAND)
+        .args(CODESIGN_ENTITLEMENT_ARGS)
         .arg(binary_path)
         .output()?;
-    
+
     if !output.status.success() {
         // Binary might not be signed or might not have entitlements
         return Ok(HashMap::new());
     }
-    
+
     let xml_content = String::from_utf8(output.stdout)?;
-    
+
     // Parse the XML plist to extract entitlements
     parse_entitlements_plist(&xml_content)
 }
@@ -60,23 +58,23 @@ pub fn extract_entitlements_codesign(binary_path: &Path) -> Result<HashMap<Strin
 fn parse_entitlements_plist(xml_content: &str) -> Result<HashMap<String, Value>> {
     // Simple XML parsing for plist format
     // Look for the main dict content between <dict> and </dict>
-    
+
     if xml_content.trim().is_empty() {
         return Ok(HashMap::new());
     }
-    
+
     // Find the main dictionary content
     let dict_start = xml_content.find("<dict>")
         .ok_or_else(|| anyhow!("No dict found in plist"))?;
     let dict_end = xml_content.rfind("</dict>")
         .ok_or_else(|| anyhow!("Unclosed dict in plist"))?;
-    
+
     if dict_start >= dict_end {
         return Ok(HashMap::new());
     }
-    
+
     let dict_content = &xml_content[dict_start + 6..dict_end];
-    
+
     // Parse key-value pairs
     parse_plist_dict(dict_content)
 }
@@ -85,19 +83,19 @@ fn parse_entitlements_plist(xml_content: &str) -> Result<HashMap<String, Value>>
 fn parse_plist_dict(content: &str) -> Result<HashMap<String, Value>> {
     let mut entitlements = HashMap::new();
     let mut pos = 0;
-    
+
     while pos < content.len() {
         // Find next <key> tag
         if let Some(key_start) = content[pos..].find("<key>") {
             let abs_key_start = pos + key_start + 5; // Skip "<key>"
-            
+
             if let Some(key_end) = content[abs_key_start..].find("</key>") {
                 let abs_key_end = abs_key_start + key_end;
                 let key = content[abs_key_start..abs_key_end].trim().to_string();
-                
+
                 // Find the value after the key
                 pos = abs_key_end + 6; // Skip "</key>"
-                
+
                 if let Some(value) = parse_next_plist_value(&content[pos..])? {
                     entitlements.insert(key, value.0);
                     pos += value.1;
@@ -111,7 +109,7 @@ fn parse_plist_dict(content: &str) -> Result<HashMap<String, Value>> {
             break;
         }
     }
-    
+
     Ok(entitlements)
 }
 
@@ -119,7 +117,7 @@ fn parse_plist_dict(content: &str) -> Result<HashMap<String, Value>> {
 fn parse_next_plist_value(content: &str) -> Result<Option<(Value, usize)>> {
     let trimmed = content.trim_start();
     let offset = content.len() - trimmed.len();
-    
+
     if trimmed.starts_with("<true/>") {
         Ok(Some((Value::Bool(true), offset + 7)))
     } else if trimmed.starts_with("<false/>") {
@@ -194,7 +192,7 @@ mod tests {
     <true/>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist).unwrap();
         assert_eq!(result.len(), 1);
         assert!(result.contains_key("com.apple.security.app-sandbox"));
@@ -214,7 +212,7 @@ mod tests {
     <false/>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist).unwrap();
         assert_eq!(result.len(), 3);
         assert!(result.contains_key("com.apple.security.app-sandbox"));
@@ -231,7 +229,7 @@ mod tests {
     <string>TEAM123.com.example.app</string>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist).unwrap();
         assert_eq!(result.len(), 1);
         assert!(result.contains_key("com.apple.application-identifier"));
@@ -243,7 +241,7 @@ mod tests {
 <plist version="1.0">
 <!-- No dict here -->
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist);
         assert!(result.is_err(), "Missing dict should fail");
     }
@@ -256,7 +254,7 @@ mod tests {
     <key>test</key>
     <true/>
 <!-- missing </dict> -->"#;
-        
+
         let result = parse_entitlements_plist(plist);
         // Parser should handle this gracefully - either error or partial result
         // Both outcomes are acceptable for malformed input
@@ -272,7 +270,7 @@ mod tests {
     <integer>42</integer>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist).unwrap();
         assert_eq!(result.len(), 1);
         assert!(result.contains_key("some.integer.key"));
@@ -293,7 +291,7 @@ mod tests {
         // Create a temp file that's just text, not a binary
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "This is not a binary file").unwrap();
-        
+
         let result = extract_entitlements(temp_file.path());
         // Should return empty HashMap (not signed)
         assert!(result.is_ok());
@@ -372,14 +370,14 @@ mod tests {
         let plist = r#"<?xml version="1.0" encoding="UTF-8"?>
 <plist version="1.0">
 <dict>
-    
+
     <key>  com.apple.security.app-sandbox  </key>
-    
+
     <true/>
-    
+
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist);
         assert!(result.is_ok());
     }
@@ -395,7 +393,7 @@ mod tests {
     </array>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist);
         assert!(result.is_ok());
         let map = result.unwrap();
@@ -414,7 +412,7 @@ mod tests {
     </dict>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist);
         assert!(result.is_ok());
     }
@@ -430,9 +428,9 @@ mod tests {
     <true/>
 </dict>
 </plist>"#;
-        
+
         let result = parse_entitlements_plist(plist).unwrap();
-        
+
         // Keys should be preserved exactly
         assert!(result.contains_key("com.apple.security.cs.allow-jit"));
         assert!(result.contains_key("com.apple.security.cs.disable-library-validation"));

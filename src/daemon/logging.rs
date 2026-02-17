@@ -1,12 +1,14 @@
-//! Enhanced ULS logging for daemon process detection
+//! Daemon logging via macOS Unified Logging System (ULS)
 //!
-//! Provides structured logging to macOS Unified Logging System
+//! Provides structured logging for daemon events including
+//! startup, shutdown, process detection, and errors.
 
 use anyhow::{Context, Result};
 use serde_json::json;
 use oslog::OsLogger;
 use log::{error, info};
 use std::process::Command;
+use crate::constants::{LOG_JSON_SEPARATOR, LOG_COMMAND, LOG_STYLE};
 
 /// Enhanced daemon logger for macOS ULS integration
 #[derive(Debug, Clone)]
@@ -56,7 +58,7 @@ impl DaemonLogger {
     /// Log daemon shutdown event
     pub fn log_shutdown(&self, reason: &str) -> Result<()> {
         let message = json!({
-            "event": "daemon_shutdown", 
+            "event": "daemon_shutdown",
             "reason": reason,
             "timestamp": chrono::Utc::now().to_rfc3339(),
         });
@@ -64,19 +66,12 @@ impl DaemonLogger {
         self.log_structured(LogLevel::Info, "Daemon shutting down", &message)
     }
 
-    /// Log process detection events
-    pub fn log_process_detection(&self, pid: u32, process_name: &str, executable_path: &str, entitlements: &[String]) -> Result<()> {
-        let message = json!({
-            "event": "process_detected",
-            "pid": pid,
-            "process_name": process_name,
-            "executable_path": executable_path,
-            "entitlement_count": entitlements.len(),
-            "entitlements": entitlements,
-            "timestamp": chrono::Utc::now().to_rfc3339(),
-        });
+    /// Log process detection events using the canonical ProcessDetectionEvent schema
+    pub fn log_process_detection(&self, event: &crate::models::ProcessDetectionEvent) -> Result<()> {
+        let message = serde_json::to_value(event)
+            .context("Failed to serialize process detection event")?;
 
-        self.log_structured(LogLevel::Info, &format!("New process detected: {}", executable_path), &message)
+        self.log_structured(LogLevel::Info, &format!("New process detected: {}", event.path), &message)
     }
 
     /// Log error events
@@ -99,8 +94,8 @@ impl DaemonLogger {
         }
 
         // Format the complete log message with structured data
-        let full_message = format!("{} | {}", message, data.to_string());
-        
+        let full_message = format!("{}{}{}", message, LOG_JSON_SEPARATOR, data.to_string());
+
         // Use log crate macros which will go to ULS
         match level {
             LogLevel::Error => {
@@ -110,7 +105,7 @@ impl DaemonLogger {
                 info!("{}", full_message);
             },
         }
-        
+
         Ok(())
     }
 
@@ -125,9 +120,9 @@ impl DaemonLogger {
 }
 
 /// Helper function to retrieve daemon logs using `log show`
-/// Returns structured JSON logs from the past specified duration
+/// Returns raw log lines from the past specified duration
 pub fn get_daemon_logs(subsystem: &str, since: &str) -> Result<Vec<String>> {
-    let output = Command::new("log")
+    let output = Command::new(LOG_COMMAND)
         .args([
             "show",
             "--predicate",
@@ -135,7 +130,7 @@ pub fn get_daemon_logs(subsystem: &str, since: &str) -> Result<Vec<String>> {
             "--last",
             since,
             "--style",
-            "compact",
+            LOG_STYLE,
         ])
         .output()
         .context("Failed to execute log show command")?;

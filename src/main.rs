@@ -14,13 +14,13 @@ use std::time::Instant;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use rayon::prelude::*;
-use crate::constants::APP_SUBSYSTEM;
+use crate::constants::{APP_SUBSYSTEM, OS_ERROR_PERMISSION, PERMISSION_DENIED, LOG_COMMAND, LOG_STYLE, LOG_JSON_SEPARATOR, LAUNCHD_DAEMONS_DIR, LAUNCHD_PLIST_NAME};
 
 fn main() {
     // Determine execution mode from CLI arguments
     let result = (|| -> Result<()> {
         match cli::get_execution_mode()? {
-            cli::ExecutionMode::Scan => run_scan_mode(),
+            cli::ExecutionMode::Scan(args) => run_scan_mode(args),
             cli::ExecutionMode::Monitor { path, entitlement, interval, json, quiet } => {
                 run_monitor_mode(path, entitlement, interval, json, quiet)
             }
@@ -34,7 +34,7 @@ fn main() {
 
         // Then check for permission denied and show hint
         let err_string = format!("{:?}", e);
-        if err_string.contains("os error 13") || err_string.contains("Permission denied") {
+        if err_string.contains(OS_ERROR_PERMISSION) || err_string.contains(PERMISSION_DENIED) {
             eprintln!("\n💡 Hint: Some paths require elevated privileges. Try:");
             eprintln!("   sudo listent [PATH...]");
         }
@@ -43,43 +43,43 @@ fn main() {
     }
 }
 
-fn run_scan_mode() -> Result<()> {
-    let config = cli::parse_args()?;
-    
+fn run_scan_mode(args: cli::Args) -> Result<()> {
+    let config = cli::parse_args_from(args)?;
+
     // Set up interrupt handling using signal-hook
     let interrupted = Arc::new(AtomicBool::new(false));
-    
+
     // Register signal handlers for SIGINT and SIGTERM
     signal_hook::flag::register(signal_hook::consts::SIGINT, interrupted.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGTERM, interrupted.clone())?;
-    
+
     let start_time = Instant::now();
-    
+
     // Progress indicator for animated scanning
     let mut progress = if !config.quiet_mode {
         Some(output::progress::ScanProgress::new())
     } else {
         None
     };
-    
+
     // Fast count total files (like find command) with interrupt support
     let total_files = scan::count_total_files_with_interrupt(&config.scan_paths, &interrupted)
         .context("Failed to count total files")?;
-    
+
     // Check if interrupted during counting
     if interrupted.load(Ordering::Relaxed) {
         return Ok(());
     }
-    
+
     // Start progress with total file count
     if let Some(ref mut progress) = progress {
         progress.start_scanning(total_files);
     }
-    
+
     // ========== PHASE 1: Collect all binaries (sequential, fast) ==========
     let mut discovered_binaries = Vec::new();
     let mut skipped_count = 0usize;
-    
+
     for path_str in &config.scan_paths {
         let path = std::path::Path::new(path_str);
         if path.exists() {
@@ -87,7 +87,7 @@ fn run_scan_mode() -> Result<()> {
             if let Some(ref mut progress) = progress {
                 progress.set_current_directory(path);
             }
-            
+
             if path.is_file() {
                 if let Some(binary) = scan::check_single_file(path) {
                     discovered_binaries.push(binary);
@@ -99,38 +99,38 @@ fn run_scan_mode() -> Result<()> {
                 }
             } else {
                 collect_binaries_from_directory(
-                    path, 
-                    &mut discovered_binaries, 
+                    path,
+                    &mut discovered_binaries,
                     &mut skipped_count,
-                    &mut progress, 
+                    &mut progress,
                     &interrupted
                 )?;
             }
         }
-        
+
         if interrupted.load(Ordering::Relaxed) {
             break;
         }
     }
-    
+
     // Complete progress indicator after discovery phase
     if let Some(mut progress) = progress {
         progress.complete_scanning();
     }
-    
+
     // Check if interrupted during discovery
     let was_interrupted_early = interrupted.load(Ordering::Relaxed);
     if was_interrupted_early && discovered_binaries.is_empty() {
         return Ok(());
     }
-    
+
     // ========== PHASE 2: Extract entitlements in parallel (slow part) ==========
     let scanned = AtomicUsize::new(0);
     let matched = AtomicUsize::new(0);
     let skipped_unreadable = AtomicUsize::new(0);
     let config_ref = &config;
     let interrupted_ref = &interrupted;
-    
+
     // Process binaries in parallel using rayon
     let results: Vec<models::BinaryResult> = discovered_binaries
         .par_iter()
@@ -139,15 +139,15 @@ fn run_scan_mode() -> Result<()> {
             if interrupted_ref.load(Ordering::Relaxed) {
                 return None;
             }
-            
+
             scanned.fetch_add(1, Ordering::Relaxed);
-            
+
             match entitlements::extract_entitlements(&binary.path) {
                 Ok(entitlement_map) => {
                     let entitlement_keys: Vec<String> = entitlement_map.keys().cloned().collect();
-                    
+
                     if entitlements::pattern_matcher::entitlements_match_filters(
-                        &entitlement_keys, 
+                        &entitlement_keys,
                         &config_ref.filters.entitlements
                     ) {
                         let filtered_entitlements = if config_ref.filters.entitlements.is_empty() {
@@ -161,7 +161,7 @@ fn run_scan_mode() -> Result<()> {
                                 })
                                 .collect()
                         };
-                        
+
                         matched.fetch_add(1, Ordering::Relaxed);
                         Some(models::BinaryResult {
                             path: binary.path.to_string_lossy().to_string(),
@@ -179,14 +179,14 @@ fn run_scan_mode() -> Result<()> {
             }
         })
         .collect();
-    
+
     // Sort results by path for deterministic output
     let mut results = results;
     results.sort_by(|a, b| a.path.cmp(&b.path));
-    
+
     let duration_ms = start_time.elapsed().as_millis() as u64;
     let was_interrupted = interrupted.load(Ordering::Relaxed);
-    
+
     let output = models::EntitlementScanOutput {
         results,
         summary: models::ScanSummary {
@@ -216,15 +216,15 @@ fn collect_binaries_from_directory(
     interrupted: &Arc<AtomicBool>,
 ) -> Result<()> {
     use std::fs;
-    
+
     for entry in fs::read_dir(dir_path)? {
         if interrupted.load(Ordering::Relaxed) {
             return Ok(());
         }
-        
+
         let entry = entry?;
         let path = entry.path();
-        
+
         if path.is_file() {
             if let Some(binary) = scan::check_single_file(&path) {
                 binaries.push(binary);
@@ -241,7 +241,7 @@ fn collect_binaries_from_directory(
             collect_binaries_from_directory(&path, binaries, skipped, progress, interrupted)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -253,14 +253,14 @@ fn run_monitor_mode(
     quiet: bool,
 ) -> Result<()> {
     let config = cli::parse_monitor_config(path, entitlement, interval, json, quiet)?;
-    
+
     // Set up interrupt handling using signal-hook (same as scan mode)
     let interrupted = Arc::new(AtomicBool::new(false));
-    
+
     // Register signal handlers for SIGINT and SIGTERM
     signal_hook::flag::register(signal_hook::consts::SIGINT, interrupted.clone())?;
     signal_hook::flag::register(signal_hook::consts::SIGTERM, interrupted.clone())?;
-    
+
     monitor::polling::start_monitoring_with_interrupt(config, interrupted)
 }
 
@@ -299,7 +299,7 @@ fn run_daemon_command(action: cli::DaemonCommands) -> Result<()> {
     // Check for permission denied errors and suggest sudo
     if let Err(ref e) = result {
         let err_string = format!("{:?}", e);
-        if err_string.contains("os error 13") || err_string.contains("Permission denied") {
+        if err_string.contains(OS_ERROR_PERMISSION) || err_string.contains(PERMISSION_DENIED) {
             eprintln!("\n💡 Hint: This operation requires root privileges. Try:");
             eprintln!("   sudo listent daemon {}", cmd_name);
         }
@@ -312,7 +312,7 @@ fn run_daemon_mode(config: Option<std::path::PathBuf>) -> Result<()> {
     // Create tokio runtime for async daemon execution
     let runtime = tokio::runtime::Runtime::new()
         .context("Failed to create tokio runtime")?;
-    
+
     // Execute daemon mode with config path
     runtime.block_on(daemon::run_daemon_with_config(config))
 }
@@ -334,9 +334,6 @@ fn install_daemon_service(config_path: Option<std::path::PathBuf>) -> Result<()>
 
     // Validate configuration
     daemon_config.validate()?;
-
-    // Ensure required directories exist
-    daemon_config.ensure_directories()?;
 
     // Save configuration to standard location if not provided
     let final_config_path = if let Some(config_file) = config_path {
@@ -366,7 +363,7 @@ fn install_daemon_service(config_path: Option<std::path::PathBuf>) -> Result<()>
     Ok(())
 }
 
-/// Uninstall daemon service from LaunchD  
+/// Uninstall daemon service from LaunchD
 fn uninstall_daemon_service() -> Result<()> {
     use crate::daemon::launchd::LaunchDPlist;
 
@@ -379,7 +376,7 @@ fn uninstall_daemon_service() -> Result<()> {
     plist.uninstall_service()?;
 
     println!("✅ Daemon service uninstallation complete!");
-    
+
     Ok(())
 }
 
@@ -431,6 +428,10 @@ fn show_daemon_status() -> Result<()> {
             println!("  • View logs: listent daemon logs");
             println!("  • Stop daemon: listent daemon uninstall");
         }
+        (true, Some(_)) => {
+            println!("⚠ Daemon process running but LaunchD service reports stopped");
+            println!("  • Clean restart recommended: listent daemon uninstall && listent daemon install");
+        }
         (true, None) => {
             println!("✓ Daemon running directly (not as LaunchD service)");
             println!("  • View logs: listent daemon logs");
@@ -446,10 +447,6 @@ fn show_daemon_status() -> Result<()> {
             println!("ℹ No daemon running");
             println!("  • Start daemon: listent daemon install");
         }
-        _ => {
-            println!("⚠ Inconsistent state detected");
-            println!("  • Clean restart recommended: listent daemon uninstall && listent daemon install");
-        }
     }
 
     Ok(())
@@ -458,23 +455,23 @@ fn show_daemon_status() -> Result<()> {
 /// Stop running daemon process
 fn stop_daemon_process() -> Result<()> {
     use crate::daemon::launchd::LaunchDPlist;
-    
+
     println!("🛑 Stopping listent daemon...");
 
     // First, check if daemon is running as LaunchD service
     let current_exe = std::env::current_exe()
         .context("Could not determine current executable path")?;
     let plist = LaunchDPlist::new(&current_exe);
-    
+
     // Check if LaunchD service exists
     let service_loaded = plist.is_service_loaded().unwrap_or(false);
-    
+
     if service_loaded {
         // If running under LaunchD, we need to unload it (KeepAlive will restart if we just kill)
         println!("📋 Detected LaunchD service, stopping...");
-        println!("⚠️  Note: Service will remain installed. To restart: sudo launchctl bootstrap system /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist");
+        println!("⚠️  Note: Service will remain installed. To restart: sudo launchctl bootstrap system {}/{}", LAUNCHD_DAEMONS_DIR, LAUNCHD_PLIST_NAME);
         println!("   To permanently remove: sudo listent daemon uninstall");
-        
+
         if let Err(e) = plist.launchctl_unload() {
             println!("⚠️  Failed to stop LaunchD service: {}", e);
             println!("   Attempting to kill process directly...");
@@ -485,45 +482,7 @@ fn stop_daemon_process() -> Result<()> {
     }
 
     // If not a LaunchD service (or unload failed), kill the process directly
-    let output = std::process::Command::new("pgrep")
-        .args(["-f", "listent"])
-        .output()
-        .context("Failed to search for listent processes")?;
-
-    if !output.status.success() || output.stdout.is_empty() {
-        println!("❌ No listent daemon processes found");
-        return Ok(());
-    }
-
-    // Get all listent PIDs and check their command lines
-    let pids: Vec<u32> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| line.trim().parse::<u32>().ok())
-        .collect();
-
-    let mut daemon_pids = Vec::new();
-    let current_pid = std::process::id();
-
-    for pid in pids {
-        if pid == current_pid {
-            continue; // Skip current process
-        }
-
-        // Check if this is a daemon process
-        if let Ok(cmd_output) = std::process::Command::new("ps")
-            .args(["-p", &pid.to_string(), "-o", "args="])
-            .output()
-        {
-            let cmd_line = String::from_utf8_lossy(&cmd_output.stdout);
-            // Only match actual listent daemon processes running 'daemon run', not sudo commands
-            if cmd_line.contains("listent") && 
-               cmd_line.contains("daemon") && 
-               cmd_line.contains("run") &&
-               !cmd_line.contains("sudo") {
-                daemon_pids.push(pid);
-            }
-        }
-    }
+    let daemon_pids = daemon::find_daemon_pids();
 
     if daemon_pids.is_empty() {
         println!("❌ No listent daemon processes found");
@@ -531,20 +490,13 @@ fn stop_daemon_process() -> Result<()> {
     }
 
     // Stop each daemon process gracefully with SIGTERM
-    let mut any_failed = false;
-    for pid in &daemon_pids {
-        let result = std::process::Command::new("kill")
+    let any_failed = daemon_pids.iter().any(|pid| {
+        std::process::Command::new("kill")
             .args(["-TERM", &pid.to_string()])
-            .output();
-
-        if let Err(_) = result {
-            any_failed = true;
-        } else if let Ok(output) = result {
-            if !output.status.success() {
-                any_failed = true;
-            }
-        }
-    }
+            .output()
+            .map(|output| !output.status.success())
+            .unwrap_or(true)
+    });
 
     if any_failed {
         println!("❌ Failed to stop some daemon processes");
@@ -555,17 +507,16 @@ fn stop_daemon_process() -> Result<()> {
     std::thread::sleep(std::time::Duration::from_secs(2));
 
     // Check if processes are still running
-    let mut still_running = Vec::new();
-    for pid in &daemon_pids {
-        if let Ok(output) = std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])  // Signal 0 just checks if process exists
-            .output()
-        {
-            if output.status.success() {
-                still_running.push(*pid);
-            }
-        }
-    }
+    let still_running: Vec<u32> = daemon_pids.iter()
+        .filter(|pid| {
+            std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .output()
+                .map(|output| output.status.success())
+                .unwrap_or(false)
+        })
+        .copied()
+        .collect();
 
     if still_running.is_empty() {
         println!("✅ Daemon stopped successfully");
@@ -589,37 +540,13 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
     use std::io::{BufRead, BufReader};
 
     // Helper to format a log line for human-readable output
+    let json_needle = format!("{}{{" , LOG_JSON_SEPARATOR);
     let format_human_line = |line: &str| -> Option<String> {
         // Try to extract JSON from the log line (after the | separator)
-        if let Some(json_start) = line.find(" | {") {
-            let json_part = &line[json_start + 3..];
-            if let Ok(entry) = serde_json::from_str::<serde_json::Value>(json_part) {
-                let path = entry.get("executable_path")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown");
-                let pid = entry.get("pid")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                
-                // Extract entitlement names
-                let entitlements: Vec<&str> = entry.get("entitlements")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| arr.iter()
-                        .filter_map(|e| e.as_str())
-                        .collect())
-                    .unwrap_or_default();
-                
-                // Extract timestamp from beginning of log line
-                let timestamp = if line.len() > 23 { &line[..23] } else { "unknown" };
-                
-                let ent_list = if entitlements.is_empty() {
-                    "none".to_string()
-                } else {
-                    entitlements.join(", ")
-                };
-                
-                return Some(format!("[{}] {} (PID: {})\n    Entitlements: {}", 
-                    timestamp, path, pid, ent_list));
+        if let Some(json_start) = line.find(&json_needle) {
+            let json_part = &line[json_start + LOG_JSON_SEPARATOR.len()..];
+            if let Ok(event) = serde_json::from_str::<models::ProcessDetectionEvent>(json_part) {
+                return Some(output::format_event_human(&event));
             }
         }
         None
@@ -628,14 +555,14 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
     // Handle follow mode with log stream
     if follow {
         println!("📄 Following daemon logs (Ctrl+C to stop)...");
-        
-        let mut cmd = Command::new("log")
+
+        let mut cmd = Command::new(LOG_COMMAND)
             .args([
                 "stream",
                 "--predicate",
                 &format!("subsystem == \"{}\"", APP_SUBSYSTEM),
                 "--style",
-                "compact",
+                LOG_STYLE,
             ])
             .stdout(Stdio::piped())
             .spawn()
@@ -650,11 +577,11 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
                     if l.trim().is_empty() || l.starts_with("Filtering") || l.starts_with("Timestamp") {
                         continue;
                     }
-                    
+
                     if format == "json" {
                         // Extract just the JSON part
-                        if let Some(json_start) = l.find(" | {") {
-                            println!("{}", &l[json_start + 3..]);
+                        if let Some(json_start) = l.find(&json_needle) {
+                            println!("{}", &l[json_start + LOG_JSON_SEPARATOR.len()..]);
                         } else {
                             println!("{}", l);
                         }
@@ -673,7 +600,7 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
 
         return Ok(());
     }
-    
+
     println!("📄 Retrieving daemon logs...");
 
     // Validate time format if provided
@@ -696,13 +623,13 @@ fn show_daemon_logs(follow: bool, since: Option<String>, format: String) -> Resu
     }
 
     println!("📄 Found {} log entries", logs.len());
-    
+
     match format.as_str() {
         "json" => {
             for log_line in &logs {
                 // Extract just the JSON part
-                if let Some(json_start) = log_line.find(" | {") {
-                    println!("{}", &log_line[json_start + 3..]);
+                if let Some(json_start) = log_line.find(&json_needle) {
+                    println!("{}", &log_line[json_start + LOG_JSON_SEPARATOR.len()..]);
                 } else {
                     println!("{}", log_line);
                 }

@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::constants::{DEFAULT_SCAN_PATHS, DEFAULT_POLLING_INTERVAL, POLLING_INTERVAL_MIN, POLLING_INTERVAL_MAX};
+
 /// Main daemon configuration structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DaemonConfiguration {
@@ -32,15 +34,34 @@ pub struct MonitoringSettings {
     pub entitlement_filters: Vec<String>,
 }
 
+impl Default for DaemonConfiguration {
+    fn default() -> Self {
+        Self {
+            daemon: DaemonSettings {
+                polling_interval: DEFAULT_POLLING_INTERVAL,
+                auto_start: true,
+            },
+            monitoring: MonitoringSettings {
+                path_filters: {
+                    let mut paths = vec![PathBuf::from("/Applications")];
+                    paths.extend(DEFAULT_SCAN_PATHS.iter().map(PathBuf::from));
+                    paths
+                },
+                entitlement_filters: vec![], // Monitor all entitlements by default
+            },
+        }
+    }
+}
+
 impl DaemonConfiguration {
     /// Load configuration from TOML file
     pub fn load_from_file(path: &std::path::Path) -> Result<Self> {
         let content = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read config file: {}", path.display()))?;
-        
+
         let config: DaemonConfiguration = toml::from_str(&content)
             .with_context(|| format!("Failed to parse config file: {}", path.display()))?;
-        
+
         config.validate()?;
         Ok(config)
     }
@@ -48,28 +69,30 @@ impl DaemonConfiguration {
     /// Save configuration to TOML file atomically
     pub fn save_to_file(&self, path: &std::path::Path) -> Result<()> {
         self.validate()?;
-        
+
         let content = toml::to_string_pretty(self)
             .context("Failed to serialize configuration")?;
-        
+
         // Atomic write using temporary file
         let temp_path = path.with_extension("tmp");
         std::fs::write(&temp_path, content)
             .with_context(|| format!("Failed to write temp config: {}", temp_path.display()))?;
-        
+
         std::fs::rename(&temp_path, path)
             .with_context(|| format!("Failed to replace config file: {}", path.display()))?;
-        
+
         Ok(())
     }
 
     /// Validate all configuration settings
     pub fn validate(&self) -> Result<()> {
         // Validate polling interval
-        if self.daemon.polling_interval < 0.1 || self.daemon.polling_interval > 300.0 {
+        if self.daemon.polling_interval < POLLING_INTERVAL_MIN || self.daemon.polling_interval > POLLING_INTERVAL_MAX {
             anyhow::bail!(
-                "Invalid polling interval: {}. Must be between 0.1 and 300.0 seconds",
-                self.daemon.polling_interval
+                "Invalid polling interval: {}. Must be between {} and {} seconds",
+                self.daemon.polling_interval,
+                POLLING_INTERVAL_MIN,
+                POLLING_INTERVAL_MAX
             );
         }
 
@@ -83,33 +106,9 @@ impl DaemonConfiguration {
         Ok(())
     }
 
-    /// Create default daemon configuration
-    pub fn default() -> Self {
-        Self {
-            daemon: DaemonSettings {
-                polling_interval: 1.0,
-                auto_start: true,
-            },
-            monitoring: MonitoringSettings {
-                path_filters: vec![
-                    PathBuf::from("/Applications"),
-                    PathBuf::from("/usr/bin"),
-                    PathBuf::from("/usr/sbin"),
-                ],
-                entitlement_filters: vec![], // Monitor all entitlements by default
-            },
-        }
-    }
-
     /// Get polling interval as Duration
     pub fn polling_duration(&self) -> Duration {
         Duration::from_secs_f64(self.daemon.polling_interval)
-    }
-
-    /// Create configuration directories if they don't exist
-    pub fn ensure_directories(&self) -> Result<()> {
-        // No directories needed currently - config files are created on demand
-        Ok(())
     }
 
     /// Get default configuration file path
