@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Test runner script for functional tests
+# Usage: ./tests/run_functional_tests.sh
 # Ensures binary is built and runs tests with proper setup
 
 set -e

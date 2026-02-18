@@ -1,9 +1,8 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
 fn test_version_prints_semantic_version() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--version");
     
     cmd.assert()
@@ -13,7 +12,7 @@ fn test_version_prints_semantic_version() {
 
 #[test]
 fn test_version_includes_commit_hash() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--version");
     
     // Should include git hash in format like "listent 0.1.0 (abc1234)"
@@ -24,7 +23,7 @@ fn test_version_includes_commit_hash() {
 
 #[test]
 fn test_short_version_flag() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("-V");
     
     cmd.assert()

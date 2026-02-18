@@ -1,9 +1,8 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
 fn test_human_readable_output_format() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -14,7 +13,7 @@ fn test_human_readable_output_format() {
 
 #[test]
 fn test_json_output_format() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--json", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -27,7 +26,7 @@ fn test_json_output_format() {
 
 #[test]
 fn test_timestamp_formatting() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -37,7 +36,7 @@ fn test_timestamp_formatting() {
 
 #[test]
 fn test_entitlements_list_formatting() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -47,7 +46,7 @@ fn test_entitlements_list_formatting() {
 
 #[test]
 fn test_quiet_mode_output_suppression() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--quiet", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -59,7 +58,7 @@ fn test_quiet_mode_output_suppression() {
 #[test]
 fn test_no_entitlements_formatting() {
     // Test basic monitor mode
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()

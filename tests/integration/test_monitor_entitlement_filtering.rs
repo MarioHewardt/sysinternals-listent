@@ -1,10 +1,9 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
 
 #[test]
 fn test_monitor_with_camera_entitlement_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor", 
         "-e", "com.apple.security.device.camera",
@@ -18,7 +17,7 @@ fn test_monitor_with_camera_entitlement_filter() {
 
 #[test]
 fn test_monitor_with_microphone_entitlement_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "com.apple.security.device.microphone", 
@@ -32,7 +31,7 @@ fn test_monitor_with_microphone_entitlement_filter() {
 
 #[test]
 fn test_monitor_with_multiple_entitlement_filters() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "com.apple.security.device.camera",
@@ -46,7 +45,7 @@ fn test_monitor_with_multiple_entitlement_filters() {
 
 #[test]
 fn test_monitor_with_network_entitlement_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "com.apple.security.network.client",
@@ -60,7 +59,7 @@ fn test_monitor_with_network_entitlement_filter() {
 
 #[test]
 fn test_entitlement_filter_with_json_output() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "com.apple.security.app-sandbox",
@@ -75,7 +74,7 @@ fn test_entitlement_filter_with_json_output() {
 #[test]
 fn test_entitlement_filter_partial_matching() {
     // Test that partial entitlement strings work for filtering
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "camera", // Should match com.apple.security.device.camera
@@ -90,7 +89,7 @@ fn test_entitlement_filter_partial_matching() {
 fn test_processes_with_no_entitlements() {
     // Test monitoring when processes have no entitlements
     // This should still work but may not produce output
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "nonexistent.entitlement",
@@ -104,7 +103,7 @@ fn test_processes_with_no_entitlements() {
 #[test]
 fn test_entitlement_extraction_error_handling() {
     // Test that monitor continues even if entitlement extraction fails
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "-e", "com.apple.security.app-sandbox",

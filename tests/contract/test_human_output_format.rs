@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -6,7 +5,7 @@ use tempfile::TempDir;
 fn test_human_output_format_structure() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
@@ -18,7 +17,7 @@ fn test_human_output_format_structure() {
 fn test_human_output_summary_format() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -36,7 +35,7 @@ fn test_human_output_summary_format() {
 fn test_human_output_no_matches_case() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.nonexistent.entitlement.key");
     
@@ -52,7 +51,7 @@ fn test_entitlement_line_format() {
     // "  entitlement: key=value"
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     let output = cmd.assert().success().get_output().stdout.clone();
@@ -74,7 +73,7 @@ fn test_entitlement_line_format() {
 fn test_quiet_mode_suppresses_warnings() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--quiet")
        .arg(temp.path().to_str().unwrap());
     

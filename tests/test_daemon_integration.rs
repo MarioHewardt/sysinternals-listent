@@ -3,7 +3,6 @@
 //! These tests validate the daemon's ability to start, run, and shutdown properly
 //! Note: These tests expect permission failures since they cannot write to system directories
 
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
 use tempfile::tempdir;
@@ -11,7 +10,7 @@ use tempfile::tempdir;
 #[test]
 fn test_daemon_startup_process() {
     // Test that daemon can start in background mode (daemon run subcommand)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // daemon run starts monitoring in daemon mode
     // The daemon will start and run until timeout
@@ -42,7 +41,7 @@ entitlement_filters = []
     
     // Test daemon startup with custom config
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
@@ -75,7 +74,7 @@ level = "debug"
     std::fs::write(&config_path, config_content).unwrap();
 
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
@@ -89,7 +88,7 @@ level = "debug"
 #[test]
 fn test_daemon_status_command() {
     // Test daemon status command - should succeed and show status info
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     cmd.args(&["daemon", "status"])
        .assert()
@@ -101,7 +100,7 @@ fn test_daemon_status_command() {
 fn test_daemon_launchd_integration() {
     // Test LaunchD plist generation and installation
     // Will fail due to permission issues (can't write to /Library/LaunchDaemons)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     cmd.args(&["daemon", "install"])
        .assert()
@@ -136,7 +135,7 @@ level = "info"
     
     // Test daemon with monitoring configuration
     // Will fail due to permission issues (can't write to /var/run/listent or /Library/LaunchDaemons)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()

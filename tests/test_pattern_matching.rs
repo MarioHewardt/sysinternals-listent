@@ -2,12 +2,11 @@
 //! 
 //! Tests both static scan and monitor modes to ensure consistent behavior
 
-use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
 fn test_exact_entitlement_filter_backwards_compatibility() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test exact matching continues to work
     // Note: paths are now positional arguments, not -p
@@ -18,7 +17,7 @@ fn test_exact_entitlement_filter_backwards_compatibility() {
 
 #[test]
 fn test_exact_filter_no_substring_matching() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Substring matching should NOT work (this was the old monitor mode bug)
     cmd.args(&["/usr/bin", "-e", "security.network", "--quiet"])
@@ -29,7 +28,7 @@ fn test_exact_filter_no_substring_matching() {
 
 #[test]
 fn test_glob_pattern_wildcard() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test glob pattern matching
     cmd.args(&["/usr/bin", "-e", "com.apple.security.*", "--quiet"])
@@ -39,7 +38,7 @@ fn test_glob_pattern_wildcard() {
 
 #[test]
 fn test_glob_pattern_any_network() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test wildcard matching for network entitlements
     cmd.args(&["/usr/bin", "-e", "*network*", "--quiet"])
@@ -49,7 +48,7 @@ fn test_glob_pattern_any_network() {
 
 #[test]
 fn test_multiple_glob_patterns() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test multiple patterns (OR logic)
     cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*", "-e", "*camera*", "--quiet"])
@@ -59,7 +58,7 @@ fn test_multiple_glob_patterns() {
 
 #[test]
 fn test_invalid_glob_pattern_validation() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test invalid glob pattern is rejected
     cmd.args(&["/usr/bin", "-e", "com.apple.[", "--quiet"])
@@ -70,7 +69,7 @@ fn test_invalid_glob_pattern_validation() {
 
 #[test]
 fn test_monitor_mode_glob_patterns() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test that monitor mode also supports glob patterns
     cmd.args(&["monitor", "-e", "com.apple.security.*", "--interval", "10.0"])
@@ -82,7 +81,7 @@ fn test_monitor_mode_glob_patterns() {
 
 #[test]
 fn test_monitor_mode_consistent_exact_matching() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test that monitor mode uses exact matching, not substring matching
     cmd.args(&["monitor", "-e", "network.client", "--interval", "10.0"])
@@ -94,7 +93,7 @@ fn test_monitor_mode_consistent_exact_matching() {
 
 #[test]
 fn test_json_output_with_patterns() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test JSON output works with glob patterns
     cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*", "--json", "--quiet"])
@@ -105,7 +104,7 @@ fn test_json_output_with_patterns() {
 
 #[test]
 fn test_comma_separated_patterns() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test comma-separated patterns work with glob
     cmd.args(&["/usr/bin", "-e", "com.apple.security.network.*,*camera*", "--quiet"])
@@ -115,7 +114,7 @@ fn test_comma_separated_patterns() {
 
 #[test]
 fn test_pattern_case_sensitivity() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Test that patterns are case-sensitive
     cmd.args(&["/usr/bin", "-e", "COM.APPLE.SECURITY.*", "--quiet"])

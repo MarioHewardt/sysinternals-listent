@@ -1,11 +1,10 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
 #[test]
 fn test_default_scan_directories() {
     // Test scanning with a small directory (Calculator.app) instead of default /Applications
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     
     // Use a small system app for fast testing
     cmd.arg("/System/Applications/Calculator.app")
@@ -17,7 +16,7 @@ fn test_default_scan_directories() {
 #[test]
 fn test_default_directories_listed_in_help() {
     // Help should document what the default directories are
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--help");
     
     cmd.assert()
@@ -31,7 +30,7 @@ fn test_default_directories_listed_in_help() {
 fn test_default_scan_respects_environment_override() {
     // Use a small temp directory to test quickly
     let temp = TempDir::new().unwrap();
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     // Pass the small directory as argument instead of relying on default
     cmd.arg(temp.path().to_str().unwrap());
     
@@ -43,7 +42,7 @@ fn test_default_scan_respects_environment_override() {
 #[test]
 fn test_default_scan_produces_summary() {
     // Use a small specific app for quick test
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/System/Applications/Calculator.app");
     
     cmd.assert()

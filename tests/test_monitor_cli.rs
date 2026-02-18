@@ -1,11 +1,10 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
 fn test_monitor_flag_parsing() {
     // Test that monitor subcommand is recognized by checking it produces expected output
     // We use timeout but focus on checking the output exists rather than exact content
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
         .timeout(std::time::Duration::from_millis(200))
         .assert()
@@ -20,7 +19,7 @@ fn test_interval_parameter_validation() {
     // and the help text which shows the intervals are supported
     
     // Test invalid interval - too low
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "0.05"])
         .assert()
         .failure()
@@ -28,7 +27,7 @@ fn test_interval_parameter_validation() {
         .stderr(predicate::str::contains("Must be between 0.1 and 300.0"));
 
     // Test invalid interval - too high
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "500.0"])
         .assert()
         .failure()
@@ -38,7 +37,7 @@ fn test_interval_parameter_validation() {
 
 #[test]
 fn test_monitor_help_text() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--help")
         .assert()
         .success()
@@ -51,14 +50,14 @@ fn test_monitor_help_text() {
 #[test]
 fn test_monitor_with_invalid_arguments() {
     // Test monitor with invalid path
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "/nonexistent"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("does not exist"));
 
     // Test --interval without monitor subcommand
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["--interval", "5.0"])
         .assert()
         .failure()

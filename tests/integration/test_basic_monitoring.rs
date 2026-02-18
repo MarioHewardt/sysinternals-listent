@@ -1,10 +1,9 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
 
 #[test]
 fn test_monitor_mode_startup() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .assert()
@@ -16,7 +15,7 @@ fn test_monitor_mode_startup() {
 fn test_process_detection_basic() {
     // This test runs monitor mode briefly and expects it to be interrupted by timeout
     // without requiring specific process detection
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "2.0"])
         .timeout(Duration::from_secs(4))
         .assert()
@@ -27,7 +26,7 @@ fn test_process_detection_basic() {
 fn test_ctrl_c_shutdown_handling() {
     // This test validates that monitor mode runs correctly until interrupted
     // The timeout() simulates the interrupt
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(2))
         .assert()
@@ -42,7 +41,7 @@ fn test_polling_interval_timing() {
     // This is an indirect test through timeout behavior
     let start = Instant::now();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(Duration::from_secs(3))
         .assert()
@@ -57,7 +56,7 @@ fn test_polling_interval_timing() {
 #[test]
 fn test_monitor_without_crashes() {
     // Test basic stability - monitor mode should not crash
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "0.5"])
         .timeout(Duration::from_secs(5))
         .assert()
@@ -69,7 +68,7 @@ fn test_monitor_without_crashes() {
 #[test]
 fn test_monitor_with_fast_interval() {
     // Test with minimum allowed interval
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "0.1"])
         .timeout(Duration::from_secs(2))
         .assert()
@@ -79,7 +78,7 @@ fn test_monitor_with_fast_interval() {
 #[test]
 fn test_monitor_with_slow_interval() {
     // Test with larger interval
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "3.0"])
         .timeout(Duration::from_secs(4))
         .assert()

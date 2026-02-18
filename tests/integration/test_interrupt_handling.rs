@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 
@@ -10,7 +9,7 @@ fn test_interrupt_handling_basic() {
     
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // For now, just verify the command can run successfully
@@ -25,7 +24,7 @@ fn test_interrupt_flag_in_json_output() {
     
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -47,7 +46,7 @@ fn test_interrupt_shows_partial_results() {
     
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
@@ -69,7 +68,7 @@ fn test_interrupt_graceful_cleanup() {
     
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     

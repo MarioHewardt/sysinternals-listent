@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Test runner script that runs all tests and provides a total summary
-# Usage: ./run_all_tests.sh [cargo test options]
+# Usage: ./tests/run_all_tests.sh [cargo test options]
 
 set -o pipefail
 
@@ -39,7 +39,7 @@ while IFS= read -r line; do
         passed=$(echo "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+')
         failed=$(echo "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+')
         ignored=$(echo "$line" | grep -oE '[0-9]+ ignored' | grep -oE '[0-9]+')
-        
+
         if [[ -n "$passed" ]]; then
             TOTAL_PASSED=$((TOTAL_PASSED + passed))
         fi

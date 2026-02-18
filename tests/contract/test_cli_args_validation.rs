@@ -1,11 +1,10 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
 
 #[test]
 fn test_invalid_path_returns_error() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/nonexistent/path/12345");
     
     cmd.assert()
@@ -20,7 +19,7 @@ fn test_path_not_directory_returns_error() {
     let file_path = temp.path().join("not_a_directory.txt");
     fs::write(&file_path, "test content").unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(file_path.to_str().unwrap());
     
     cmd.assert()
@@ -31,7 +30,7 @@ fn test_path_not_directory_returns_error() {
 
 #[test]
 fn test_quiet_and_verbose_conflict() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--quiet").arg("--verbose");
     
     cmd.assert()
@@ -46,7 +45,7 @@ fn test_duplicate_entitlements_accepted() {
     // Duplicate entitlements should be accepted and internally deduplicated
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--entitlement").arg("com.apple.security.app-sandbox");

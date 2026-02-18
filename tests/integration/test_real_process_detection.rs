@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::time::Duration;
 
@@ -19,7 +18,7 @@ fn test_scan_calculator_app_entitlements() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(calculator_path)
         .assert()
         .success();
@@ -36,7 +35,7 @@ fn test_scan_textedit_app_entitlements() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[textedit_path, "--json"])
         .assert()
         .success()
@@ -53,7 +52,7 @@ fn test_scan_safari_known_entitlements() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     let output = cmd.args(&[safari_path, "--json"])
         .output()
         .expect("Failed to execute");
@@ -81,7 +80,7 @@ fn test_scan_terminal_app_entitlements() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(terminal_path)
         .assert()
         .success();
@@ -97,7 +96,7 @@ fn test_scan_xcode_if_installed() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[xcode_path, "--json"])
         .timeout(Duration::from_secs(120)) // Xcode has many binaries
         .assert()
@@ -109,7 +108,7 @@ fn test_scan_xcode_if_installed() {
 #[test]
 fn test_scan_usr_bin_directory() {
     // Test scanning a few specific system utilities instead of entire /usr/bin
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["/usr/bin/sudo", "/usr/bin/codesign"])
         .assert()
         .success();
@@ -118,7 +117,7 @@ fn test_scan_usr_bin_directory() {
 #[test]
 fn test_scan_specific_system_binary() {
     // sudo should be present on all macOS systems
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin/sudo")
         .assert()
         .success();
@@ -127,7 +126,7 @@ fn test_scan_specific_system_binary() {
 #[test]
 fn test_scan_codesign_binary_itself() {
     // Meta test: scan codesign with listent
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["/usr/bin/codesign", "--json"])
         .assert()
         .success();
@@ -138,7 +137,7 @@ fn test_scan_codesign_binary_itself() {
 #[test]
 fn test_filter_sandbox_entitlement_in_applications() {
     // Calculator.app has sandbox entitlement
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "/System/Applications/Calculator.app",
         "-e", "com.apple.security.app-sandbox"
@@ -154,7 +153,7 @@ fn test_filter_network_entitlement_in_applications() {
     if !std::path::Path::new(safari_path).exists() {
         return; // Skip if Safari not installed
     }
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         safari_path,
         "-e", "com.apple.security.network.client"
@@ -166,7 +165,7 @@ fn test_filter_network_entitlement_in_applications() {
 #[test]
 fn test_filter_hardened_runtime_in_system_apps() {
     // Use Calculator.app for fast test
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "/System/Applications/Calculator.app",
         "-e", "com.apple.security.*"
@@ -185,7 +184,7 @@ fn test_json_output_structure_with_real_app() {
         return;
     }
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     let output = cmd.args(&[calculator_path, "--json", "-q"])
         .output()
         .expect("Failed to execute");
@@ -210,7 +209,7 @@ fn test_json_output_structure_with_real_app() {
 
 #[test]
 fn test_json_contains_expected_fields_for_real_binary() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     let output = cmd.args(&["/System/Applications/Calculator.app", "--json"])
         .output()
         .expect("Failed to execute");
@@ -239,7 +238,7 @@ fn test_scan_empty_directory() {
     // Create temp empty directory
     let temp_dir = tempfile::tempdir().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp_dir.path().to_str().unwrap())
         .assert()
         .success();
@@ -247,7 +246,7 @@ fn test_scan_empty_directory() {
 
 #[test]
 fn test_scan_nonexistent_path_gracefully() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/nonexistent/path/that/does/not/exist")
         .assert()
         .failure(); // Should fail but not crash
@@ -260,7 +259,7 @@ fn test_scan_mixed_content_directory() {
     // Create a text file (should be skipped)
     std::fs::write(temp_dir.path().join("test.txt"), "hello").unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp_dir.path().to_str().unwrap())
         .assert()
         .success();
@@ -273,7 +272,7 @@ fn test_scan_large_directory_performance() {
     // Test with Calculator.app - small but real app
     let start = std::time::Instant::now();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["/System/Applications/Calculator.app", "-q"])
         .assert()
         .success();
@@ -291,7 +290,7 @@ fn test_scan_large_directory_performance() {
 #[test]
 fn test_scan_with_progress_indicator() {
     // Test that progress works without errors
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/System/Applications/Calculator.app")
         .assert()
         .success();
@@ -302,7 +301,7 @@ fn test_scan_with_progress_indicator() {
 #[test]
 fn test_monitor_detects_existing_processes() {
     // Monitor mode should see currently running processes
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "0.5"])
         .timeout(Duration::from_secs(3))
         .assert()
@@ -314,7 +313,7 @@ fn test_monitor_detects_existing_processes() {
 
 #[test]
 fn test_monitor_with_applications_path_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "monitor",
         "/System/Applications/Calculator.app",
@@ -327,7 +326,7 @@ fn test_monitor_with_applications_path_filter() {
 
 #[test]
 fn test_monitor_json_output_with_real_processes() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     let output = cmd.args(&[
         "monitor",
         "--json",
@@ -368,7 +367,7 @@ fn test_find_apps_with_camera_access() {
     if !std::path::Path::new(facetime_path).exists() {
         return; // Skip if FaceTime not installed
     }
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         facetime_path,
         "-e", "com.apple.security.device.camera",
@@ -385,7 +384,7 @@ fn test_find_apps_with_microphone_access() {
     if !std::path::Path::new(facetime_path).exists() {
         return; // Skip if FaceTime not installed
     }
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         facetime_path,
         "-e", "com.apple.security.device.microphone",
@@ -398,7 +397,7 @@ fn test_find_apps_with_microphone_access() {
 #[test]
 fn test_find_apps_with_file_access() {
     // Test file access entitlement with TextEdit
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "/System/Applications/TextEdit.app",
         "-e", "com.apple.security.*",
@@ -411,7 +410,7 @@ fn test_find_apps_with_file_access() {
 #[test]
 fn test_glob_pattern_filter_with_real_apps() {
     // Test glob pattern matching on Calculator.app
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&[
         "/System/Applications/Calculator.app",
         "-e", "com.apple.security.*" // Glob for all security entitlements

@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use serde_json::Value;
 use tempfile::TempDir;
@@ -7,7 +6,7 @@ use tempfile::TempDir;
 fn test_json_output_structure() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -39,7 +38,7 @@ fn test_json_result_entry_structure() {
     // This test will be enhanced once we have test fixtures with actual binaries
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -66,7 +65,7 @@ fn test_json_result_entry_structure() {
 fn test_json_no_extra_fields() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     

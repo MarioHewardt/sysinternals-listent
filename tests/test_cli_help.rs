@@ -1,9 +1,8 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 
 #[test]
 fn test_help_includes_required_options() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--help");
     
     cmd.assert()
@@ -18,7 +17,7 @@ fn test_help_includes_required_options() {
 
 #[test]
 fn test_help_describes_path_option() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--help");
     
     cmd.assert()
@@ -29,7 +28,7 @@ fn test_help_describes_path_option() {
 
 #[test]
 fn test_help_describes_entitlement_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--help");
     
     cmd.assert()

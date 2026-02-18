@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 use serde_json::Value;
@@ -7,7 +6,7 @@ use serde_json::Value;
 fn test_json_output_flag() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -21,7 +20,7 @@ fn test_json_output_flag() {
 fn test_json_output_is_valid_json() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -38,11 +37,11 @@ fn test_json_output_deterministic_ordering() {
     let temp = TempDir::new().unwrap();
     
     // Run the same command twice
-    let mut cmd1 = Command::cargo_bin("listent").unwrap();
+    let mut cmd1 = assert_cmd::cargo_bin_cmd!("listent");
     cmd1.arg("--json").arg(temp.path().to_str().unwrap());
     let output1 = cmd1.assert().success().get_output().stdout.clone();
     
-    let mut cmd2 = Command::cargo_bin("listent").unwrap();
+    let mut cmd2 = assert_cmd::cargo_bin_cmd!("listent");
     cmd2.arg("--json").arg(temp.path().to_str().unwrap());
     let output2 = cmd2.assert().success().get_output().stdout.clone();
     
@@ -61,7 +60,7 @@ fn test_json_output_deterministic_ordering() {
 fn test_json_output_with_filters() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
@@ -80,12 +79,12 @@ fn test_json_vs_human_output_different() {
     let temp = TempDir::new().unwrap();
     
     // Human output
-    let mut cmd1 = Command::cargo_bin("listent").unwrap();
+    let mut cmd1 = assert_cmd::cargo_bin_cmd!("listent");
     cmd1.arg(temp.path().to_str().unwrap());
     let human_output = cmd1.assert().success().get_output().stdout.clone();
     
     // JSON output  
-    let mut cmd2 = Command::cargo_bin("listent").unwrap();
+    let mut cmd2 = assert_cmd::cargo_bin_cmd!("listent");
     cmd2.arg("--json").arg(temp.path().to_str().unwrap());
     let json_output = cmd2.assert().success().get_output().stdout.clone();
     

@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 use std::fs;
@@ -15,7 +14,7 @@ fn test_unreadable_files_counted() {
     // Try to make it unreadable (may not work in all environments)
     let _ = fs::set_permissions(&unreadable_file, fs::Permissions::from_mode(0o000));
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // Should complete successfully even with unreadable files
@@ -28,7 +27,7 @@ fn test_unreadable_files_counted() {
 fn test_unreadable_files_warning_in_normal_mode() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // In normal mode, warnings should go to stderr
@@ -40,7 +39,7 @@ fn test_unreadable_files_warning_in_normal_mode() {
 fn test_unreadable_files_suppressed_in_quiet_mode() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--quiet")
        .arg(temp.path().to_str().unwrap());
     
@@ -54,7 +53,7 @@ fn test_unreadable_files_suppressed_in_quiet_mode() {
 fn test_unreadable_count_in_summary() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // Unreadable count is only shown in summary when > 0
@@ -68,7 +67,7 @@ fn test_unreadable_count_in_summary() {
 fn test_unreadable_count_in_json() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("--json")
        .arg(temp.path().to_str().unwrap());
     
@@ -92,7 +91,7 @@ fn test_scan_continues_after_unreadable_files() {
     fs::write(&unreadable, "content").unwrap();
     let _ = fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000));
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // Should complete successfully

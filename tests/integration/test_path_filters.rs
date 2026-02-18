@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 use std::fs;
@@ -7,7 +6,7 @@ use std::fs;
 fn test_single_path_filter() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     cmd.assert()
@@ -20,7 +19,7 @@ fn test_multiple_path_filters() {
     let temp1 = TempDir::new().unwrap();
     let temp2 = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp1.path().to_str().unwrap())
        .arg(temp2.path().to_str().unwrap());
     
@@ -38,7 +37,7 @@ fn test_path_filter_restricts_scope() {
     fs::create_dir(&subdir).unwrap();
     fs::write(subdir.join("testfile"), "content").unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap());
     
     // Should only scan the specified temp directory, not system-wide
@@ -57,7 +56,7 @@ fn test_path_filter_restricts_scope() {
 fn test_path_filter_with_tilde_expansion() {
     // Tilde expansion is not supported by the CLI
     // The path ~/Applications is treated as a literal path, which doesn't exist
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("~/Applications");
     
     // Should fail because ~/Applications is not a valid literal path

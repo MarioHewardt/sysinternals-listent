@@ -1,4 +1,3 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use tempfile::TempDir;
 use std::time::Duration;
@@ -9,7 +8,7 @@ use std::time::Duration;
 fn test_path_and_entitlement_filters_combined() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox");
     
@@ -26,7 +25,7 @@ fn test_combined_filters_logical_and() {
     let temp1 = TempDir::new().unwrap();
     let temp2 = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp1.path().to_str().unwrap())
        .arg(temp2.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
@@ -43,12 +42,12 @@ fn test_combined_filters_restrictive_result() {
     let temp = TempDir::new().unwrap();
     
     // First get count with just path filter
-    let mut cmd1 = Command::cargo_bin("listent").unwrap();
+    let mut cmd1 = assert_cmd::cargo_bin_cmd!("listent");
     cmd1.arg(temp.path().to_str().unwrap());
     let output1 = cmd1.assert().success().get_output().stdout.clone();
     
     // Then get count with path + entitlement filter
-    let mut cmd2 = Command::cargo_bin("listent").unwrap();
+    let mut cmd2 = assert_cmd::cargo_bin_cmd!("listent");
     cmd2.arg(temp.path().to_str().unwrap())
         .arg("--entitlement").arg("com.nonexistent.entitlement");
     let output2 = cmd2.assert().success().get_output().stdout.clone();
@@ -65,7 +64,7 @@ fn test_combined_filters_restrictive_result() {
 fn test_all_filter_types_together() {
     let temp = TempDir::new().unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg(temp.path().to_str().unwrap())
        .arg("--entitlement").arg("com.apple.security.app-sandbox")
        .arg("--json")
@@ -80,7 +79,7 @@ fn test_all_filter_types_together() {
 #[test]
 fn test_multiple_entitlement_filters_or_logic_scan() {
     // Multiple -e flags should use OR logic
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.security.network.client")
        .arg("-e").arg("com.apple.security.network.server")
@@ -93,7 +92,7 @@ fn test_multiple_entitlement_filters_or_logic_scan() {
 #[test]
 fn test_glob_and_exact_filters_combined() {
     // Mix of glob patterns and exact matches
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.security.network.*") // glob
        .arg("-e").arg("com.apple.security.app-sandbox") // exact
@@ -105,7 +104,7 @@ fn test_glob_and_exact_filters_combined() {
 #[test]
 fn test_overlapping_glob_patterns() {
     // Multiple glob patterns that may overlap
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.security.*")
        .arg("-e").arg("com.apple.security.network.*") // subset of above
@@ -118,7 +117,7 @@ fn test_overlapping_glob_patterns() {
 
 #[test]
 fn test_monitor_combined_path_and_entitlement() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("-e").arg("com.apple.security.*")
@@ -132,7 +131,7 @@ fn test_monitor_combined_path_and_entitlement() {
 
 #[test]
 fn test_monitor_multiple_path_filters() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("/System/Applications/TextEdit.app")
@@ -146,7 +145,7 @@ fn test_monitor_multiple_path_filters() {
 
 #[test]
 fn test_monitor_multiple_entitlement_filters() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
        .arg("-e").arg("com.apple.security.device.camera")
        .arg("-e").arg("com.apple.security.device.microphone")
@@ -160,7 +159,7 @@ fn test_monitor_multiple_entitlement_filters() {
 
 #[test]
 fn test_monitor_all_filter_options_combined() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
        .arg("/System/Applications/Calculator.app")
        .arg("-e").arg("com.apple.security.*")
@@ -178,7 +177,7 @@ fn test_monitor_all_filter_options_combined() {
 #[test]
 fn test_empty_entitlement_filter_matches_all_with_entitlements() {
     // No -e flag means match any binary with entitlements
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("--quiet");
     
@@ -187,7 +186,7 @@ fn test_empty_entitlement_filter_matches_all_with_entitlements() {
 
 #[test]
 fn test_monitor_no_filters_monitors_all() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("monitor")
        .arg("--interval").arg("10.0")
        .timeout(Duration::from_secs(2));
@@ -202,7 +201,7 @@ fn test_monitor_no_filters_monitors_all() {
 
 #[test]
 fn test_invalid_glob_pattern_rejected() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.[invalid");
     
@@ -213,7 +212,7 @@ fn test_invalid_glob_pattern_rejected() {
 
 #[test]
 fn test_nonexistent_path_rejected() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/nonexistent/path/that/does/not/exist/anywhere");
     
     cmd.assert()
@@ -224,7 +223,7 @@ fn test_nonexistent_path_rejected() {
 
 #[test]
 fn test_json_output_with_combined_filters() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.security.*")
        .arg("--json")
@@ -243,7 +242,7 @@ fn test_json_output_with_combined_filters() {
 
 #[test]
 fn test_json_results_respect_entitlement_filter() {
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.arg("/usr/bin")
        .arg("-e").arg("com.apple.security.network.client")
        .arg("--json")

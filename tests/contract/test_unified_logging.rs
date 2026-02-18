@@ -1,11 +1,10 @@
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::process::Command as StdCommand;
 
 #[test]
 fn test_unified_logging_integration() {
     // Start monitoring in background briefly
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(3))
         .assert()
@@ -32,7 +31,7 @@ fn test_unified_logging_integration() {
 #[test]
 fn test_log_subsystem_and_category() {
     // This test verifies the logging setup without requiring actual log inspection
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -42,7 +41,7 @@ fn test_log_subsystem_and_category() {
 #[test]
 fn test_log_message_format() {
     // Test that the application starts without logging errors
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -53,7 +52,7 @@ fn test_log_message_format() {
 #[test]
 fn test_graceful_degradation_when_logging_unavailable() {
     // This test ensures monitoring continues even if logging fails
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()
@@ -65,7 +64,7 @@ fn test_graceful_degradation_when_logging_unavailable() {
 #[test]
 fn test_logging_with_process_detection() {
     // Test logging when actual processes are detected
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "0.5"])
         .timeout(std::time::Duration::from_secs(3))
         .assert()
@@ -75,7 +74,7 @@ fn test_logging_with_process_detection() {
 #[test]
 fn test_structured_logging_metadata() {
     // Ensure logging includes proper metadata fields
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["monitor", "--interval", "1.0"])
         .timeout(std::time::Duration::from_secs(2))
         .assert()

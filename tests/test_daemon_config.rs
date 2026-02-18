@@ -3,7 +3,6 @@
 //! These tests validate configuration file parsing, validation, and persistence
 //! according to specs/003-add-launchd-daemon/contracts/configuration-contract.md
 
-use assert_cmd::Command;
 use predicates::prelude::*;
 use std::fs;
 use tempfile::tempdir;
@@ -27,7 +26,7 @@ entitlement_filters = ["com.apple.security.network.client"]
     fs::write(&config_path, config_content).unwrap();
     
     // Test daemon with config file - should fail due to file not existing or permission error
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure() // Will fail due to permission issues writing plist file
@@ -55,7 +54,7 @@ entitlement_filters = []
     fs::write(&config_path, invalid_config).unwrap();
     
     // Test daemon with invalid config (will fail until implemented)
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure() // Will fail due to invalid config
@@ -82,7 +81,7 @@ entitlement_filters = []
     
     fs::write(&config_path, bounds_config).unwrap();
     
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install", "--config", config_path.to_str().unwrap()])
        .assert()
        .failure()
@@ -94,7 +93,7 @@ entitlement_filters = []
 #[test]
 fn test_default_configuration_generation() {
     // Test that daemon can generate default configuration - will fail due to permissions
-    let mut cmd = Command::cargo_bin("listent").unwrap();
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
     cmd.args(&["daemon", "install"])
        .assert()
        .failure() // Will fail due to permission issues
