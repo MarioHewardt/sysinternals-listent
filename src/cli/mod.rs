@@ -14,10 +14,10 @@ use std::time::Duration;
 
 /// Command line arguments for listent
 #[derive(Parser, Debug)]
-#[command(author, version, about, disable_help_subcommand = true)]
+#[command(author, version = env!("LISTENT_VERSION"), about = "Sysinternals tool to discover and list code signing entitlements for macOS binaries.\nBy default, scans /usr/bin and /usr/sbin. Use subcommands for monitoring or daemon mode.", disable_help_subcommand = true)]
 #[command(after_help = "Examples:
   listent                                      Scan default paths (/usr/bin, /usr/sbin)
-  listent /Applications -e \"*network*\"         Scan with entitlement filter
+  listent -e \"*network*\"                       Scan with entitlement filter
   listent monitor                              Monitor all new processes
   listent monitor -e \"com.apple.security.*\"    Monitor with entitlement filter
   listent daemon install                       Install as background service")]

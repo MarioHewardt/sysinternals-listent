@@ -91,6 +91,9 @@ fn run_scan_mode(args: cli::Args) -> Result<()> {
             if path.is_file() {
                 if let Some(binary) = scan::check_single_file(path) {
                     discovered_binaries.push(binary);
+                    if let Some(ref mut progress) = progress {
+                        progress.increment_scanned();
+                    }
                 } else {
                     skipped_count += 1;
                     if let Some(ref mut progress) = progress {

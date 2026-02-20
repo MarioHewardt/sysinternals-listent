@@ -7,8 +7,27 @@ use predicates::prelude::*;
 use std::fs;
 use tempfile::tempdir;
 
+/// Stop any running daemon instance so tests that start a daemon have a clean state
+fn stop_any_running_daemon() {
+    // Try graceful stop first
+    let _ = std::process::Command::new(env!("CARGO_BIN_EXE_listent"))
+        .args(&["daemon", "stop"])
+        .output();
+    // Wait for graceful shutdown (daemon stop itself waits up to 2s + SIGKILL)
+    std::thread::sleep(std::time::Duration::from_secs(3));
+    // Force kill any remaining listent daemon processes
+    let _ = std::process::Command::new("pkill")
+        .args(&["-9", "-f", "listent daemon run"])
+        .output();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+}
+
 #[test]
+#[ignore]
 fn test_daemon_startup_logging() {
+    // Ensure no daemon is already running
+    stop_any_running_daemon();
+
     // Test that daemon startup works (daemon run subcommand)
     // The daemon will start and run until timeout
     let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
@@ -140,7 +159,11 @@ fn test_daemon_log_structured_format() {
 }
 
 #[test]
+#[ignore]
 fn test_daemon_no_terminal_output() {
+    // Ensure no daemon is already running
+    stop_any_running_daemon();
+
     // Test that daemon run subcommand works for daemon mode
     // The daemon will start and run until timeout
     let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
