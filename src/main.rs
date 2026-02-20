@@ -220,12 +220,20 @@ fn collect_binaries_from_directory(
 ) -> Result<()> {
     use std::fs;
 
-    for entry in fs::read_dir(dir_path)? {
+    let entries = match fs::read_dir(dir_path) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(()), // Skip unreadable directories silently
+    };
+
+    for entry in entries {
         if interrupted.load(Ordering::Relaxed) {
             return Ok(());
         }
 
-        let entry = entry?;
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue, // Skip unreadable entries
+        };
         let path = entry.path();
 
         if path.is_file() {

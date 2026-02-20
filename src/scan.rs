@@ -21,13 +21,21 @@ pub struct DiscoveredBinary {
 fn count_files_in_directory_with_interrupt(path: &Path, interrupted: &std::sync::Arc<std::sync::atomic::AtomicBool>) -> Result<usize> {
     let mut count = 0;
 
-    for entry in fs::read_dir(path)? {
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(0), // Skip unreadable directories silently
+    };
+
+    for entry in entries {
         // Check for interruption frequently
         if interrupted.load(std::sync::atomic::Ordering::Relaxed) {
             return Ok(count); // Return partial count on interrupt
         }
 
-        let entry = entry?;
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue, // Skip unreadable entries
+        };
         let entry_path = entry.path();
 
         // Count files and symlinks that point to files (consistent with processing logic)
