@@ -22,4 +22,5 @@ fn main() {
     println!("cargo:rustc-env=LISTENT_VERSION={}", version);
 
     println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-env-changed=VERSION");
 }
