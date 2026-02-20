@@ -1,16 +1,16 @@
 # listent
 
-A fast command-line tool to discover and list code signing entitlements for macOS executable binaries. Supports static scanning, real-time process monitoring, and background daemon operation.
+A Sysinternals fast command-line tool to discover and list code signing entitlements for macOS executable binaries. Supports static scanning, real-time process monitoring, and background daemon operation.
 
 ## Overview
 
-`listent` recursively scans directories to find executable binaries and extracts their code signing entitlements using the `codesign` utility. It's designed for security researchers, developers, and system administrators who need to audit or understand the permissions requested by macOS applications.
+`listent` recursively scans directories to find executable binaries and extracts their code signing entitlements. It's designed for security researchers, developers, and system administrators who need to audit or understand the permissions requested by macOS applications.
 
 ## Features
 
 ### Core Capabilities
 - **Fast scanning**: Efficiently traverses directory trees with smart filtering and progress indicators
-- **Entitlement extraction**: Uses macOS `codesign` to extract entitlements from binaries  
+- **Entitlement extraction**: Uses macOS `codesign` to extract entitlements from binaries
 - **Flexible filtering**: Filter by paths and specific entitlement keys with glob pattern support
 - **Multiple output formats**: Human-readable and structured JSON output
 - **Multiple paths**: Scan multiple directories in a single command
@@ -22,16 +22,16 @@ Please see installation instructions [here](INSTALL.md).
 ## Development
 Please see development instructions [here](DEVELOPMENT.md).
 
-### Operating Modes
+## Operating Modes
 
-#### 1. Static Scan Mode (Default)
+### 1. Static Scan Mode (Default)
 Scan files and directories for entitlements:
 ```bash
 # Scan default locations (/usr/bin and /usr/sbin)
 listent
 
 # Scan specific paths
-listent /Applications /System/Applications
+listent /usr/bin /usr/sbin
 
 # Filter by entitlement patterns
 listent -e "com.apple.security.*"
@@ -41,7 +41,7 @@ listent -e "*network*" -e "*debug*"
 listent /usr/bin -e "*security*" --json
 ```
 
-#### 2. Real-time Monitor Mode
+### 2. Real-time Monitor Mode
 Monitor new processes for entitlements:
 ```bash
 # Monitor all new processes
@@ -54,7 +54,7 @@ listent monitor --interval 0.5
 listent monitor -e "com.apple.security.network.*"
 ```
 
-#### 3. Daemon Mode
+### 3. Daemon Mode
 Run monitoring continuously in the foreground (useful for testing or manual daemon operation):
 ```bash
 # Run as daemon in foreground
@@ -62,6 +62,23 @@ listent daemon run
 
 # Daemon with custom config file
 listent daemon run --config /etc/listent/custom.toml
+```
+
+Custom configuration file template (`daemon.toml`):
+```toml
+[daemon]
+# How often to poll for new processes, in seconds (0.1 - 300.0)
+polling_interval = 1.0
+# Start automatically when loaded by launchd (RunAtLoad)
+auto_start = true
+
+[monitoring]
+# Filesystem paths to scan for running process binaries.
+# Empty list = monitor processes from all paths.
+path_filters = ["/usr/bin", "/usr/sbin"]
+# Entitlement patterns to match (glob syntax). Empty list = all entitlements.
+# Examples: "com.apple.security.*", "*network*"
+entitlement_filters = []
 ```
 
 Query logs with:
@@ -76,7 +93,7 @@ log show --predicate 'subsystem == "com.microsoft.sysinternals.listent"' --last 
 log show --predicate 'subsystem == "com.microsoft.sysinternals.listent" AND messageType == error' --last 24h
 ```
 
-#### 4. Background Daemon Service
+### 4. Background Daemon Service
 Run monitoring as a persistent system service managed by launchd:
 ```bash
 # Install and start daemon
@@ -88,6 +105,10 @@ listent daemon status
 # View daemon logs
 listent daemon logs
 listent daemon logs --since 1h
+listent daemon logs --since 30m
+listent daemon logs --since "2025-01-15 10:00"
+listent daemon logs --format json
+listent daemon logs -f                    # Follow logs in real-time
 
 # Stop daemon process
 listent daemon stop
@@ -104,13 +125,13 @@ sudo listent daemon uninstall
 listent
 
 # Multi-directory scan with filtering
-listent /Applications /System/Applications -e "*security*"
+listent /usr/bin /usr/sbin -e "*security*"
 
 # Find all network-related entitlements
 listent -e "*network*" --json | jq '.results[].entitlements'
 
 # Scan quietly (suppress warnings)
-listent /System/Applications --quiet
+listent /usr/bin --quiet
 ```
 
 ### Process Monitoring
@@ -142,33 +163,6 @@ listent daemon status
 # Stop and remove daemon
 listent daemon stop
 sudo listent daemon uninstall
-```
-
-## Installation
-
-### From Source
-```bash
-# Clone and build
-git clone https://github.com/mariohewardt/listent
-cd listent
-cargo build --release
-
-# The binary will be at ./target/release/listent
-```
-
-### Quick Start
-```bash
-# Build
-cargo build --release
-
-# Show help
-./target/release/listent --help
-
-# Basic scan (default: /usr/bin and /usr/sbin)
-./target/release/listent
-
-# Show version
-./target/release/listent --version
 ```
 
 ## Configuration
@@ -233,7 +227,7 @@ category = "daemon"
 
 ### Ctrl+C Not Working in External Terminals
 
-If Ctrl+C doesn't interrupt the scan in Terminal.app or iTerm2, this is due to a macOS terminal signal handling issue. 
+If Ctrl+C doesn't interrupt the scan in Terminal.app or iTerm2, this is due to a macOS terminal signal handling issue.
 
 **Workaround**: Before running `listent`, execute:
 ```bash
@@ -284,122 +278,9 @@ Scan Summary:
 }
 ```
 
-## Architecture
-
-### Components
-- **CLI Module**: Command-line argument parsing and validation
-- **Scan Engine**: Fast directory traversal and binary discovery
-- **Entitlement Extractor**: Uses macOS `codesign` to extract entitlements
-- **Monitor Engine**: Real-time process monitoring with configurable polling
-- **Daemon Controller**: LaunchD integration for background operation
-- **Output Formatter**: Human-readable and JSON output generation
-
-### Performance
-- **Smart filtering**: Checks file permissions before expensive operations
-- **Progress tracking**: Real-time progress with file counts and directory context
-- **Optimized I/O**: Minimal file operations, efficient memory usage
-- **Interrupt handling**: Immediate response to Ctrl+C with graceful cleanup
-
-## Requirements
-
-### System Requirements
-- **macOS**: 10.15+ (uses `codesign` utility)
-- **Architecture**: x86_64 or ARM64 (Apple Silicon)
-- **Permissions**: Read access to target directories; admin privileges for daemon installation
-
-### Runtime Dependencies
-- **codesign**: System utility for entitlement extraction (included with macOS)
-- **launchd**: System service manager for daemon mode (included with macOS)
-
-## Security Considerations
-
-### Permissions
-- **Static scanning**: Requires read access to target directories
-- **Process monitoring**: Requires ability to enumerate running processes
-- **Daemon installation**: Requires administrator privileges for LaunchD registration
-
-### Privacy
-- **No data collection**: All processing is local, no network communication
-- **System logging**: Daemon mode logs to macOS Unified Logging System only
-- **Entitlement access**: Only reads publicly accessible entitlement information
-
-## Development
-
-### Building
-```bash
-# Debug build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# Run tests
-cargo test
-
-# Format code
-cargo fmt --all
-
-# Lint code
-cargo clippy --all-targets -- -D warnings
-```
-
-### Project Structure
-```
-src/
-├── main.rs              # Entry point and CLI coordination
-├── cli/                 # Command-line argument parsing
-├── models/              # Data structures and configuration
-├── scan/                # Static file/directory scanning
-├── entitlements/        # Entitlement extraction and filtering
-├── output/              # Output formatting and progress tracking
-├── monitor/             # Real-time process monitoring
-└── daemon/              # LaunchD daemon integration
-```
-
-### Testing
-```bash
-# Unit tests
-cargo test
-
-# Integration tests
-cargo test --test integration
-
-# Contract tests (CLI behavior)
-cargo test --test contract
-
-# Build and test all features
-cargo test --all-features
-```
-
-### Contributing
-1. Follow the project's constitutional principles in `CONSTITUTION.md`
-2. Check "Expansion Triggers" before adding complexity
-3. Ensure all tests pass
-4. Update documentation for new features
-
-## Related Projects
-
-- **macOS Security Research**: Tools for analyzing application entitlements and permissions
-- **System Monitoring**: Real-time process and security event monitoring tools
-- **DevOps Security**: Automated security compliance and audit tools
-
-## Roadmap
-
-See "Expansion Triggers" in `CONSTITUTION.md` before adding complexity.
-
-### Potential Enhancements
-- **Entitlement analysis**: Pattern detection and security recommendations  
-- **Historical tracking**: Process monitoring with persistent storage
-- **Integration APIs**: Webhooks and external system integration
-- **Performance optimization**: Parallel processing and caching
-
 ## Security
 
-For vulnerability reporting, supported versions, and a condensed risk overview see [`SECURITY.md`](SECURITY.md).
-
-A detailed, expanded threat model (architecture, STRIDE analysis, mitigations, and roadmap) is available at [`docs/threat-model.md`](docs/threat-model.md).
-
-If you believe you have found a security issue, please follow the disclosure process in `SECURITY.md` rather than opening a public issue.
+If you believe you have found a security issue, please report it via the project's GitHub repository rather than opening a public issue.
 
 ## License
 
