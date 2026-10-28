@@ -8,6 +8,26 @@ use std::fs;
 use tempfile::tempdir;
 
 #[test]
+fn test_install_rejects_untrusted_executable_before_saving_configuration() {
+    let directory = tempdir().unwrap();
+    let config_path = directory.path().join("daemon.toml");
+    let content = "[daemon]\npolling_interval = 1.0\nauto_start = true\n\
+                   [monitoring]\npath_filters = []\nentitlement_filters = []\n";
+    fs::write(&config_path, content).unwrap();
+
+    // A normal, unprivileged cargo build is deliberately not a trusted service binary.
+    let mut cmd = assert_cmd::cargo_bin_cmd!("listent");
+    cmd.args(["daemon", "install", "--config"])
+        .arg(&config_path)
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("Install listent in a root-owned directory"))
+        .stdout(predicate::str::contains("Saved configuration").not())
+        .stdout(predicate::str::contains("installed successfully").not());
+    assert_eq!(fs::read_to_string(config_path).unwrap(), content);
+}
+
+#[test]
 fn test_configuration_file_parsing() {
     let temp_dir = tempdir().unwrap();
     let config_path = temp_dir.path().join("daemon.toml");

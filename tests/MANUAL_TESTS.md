@@ -138,13 +138,64 @@ level = "info"
 
 ### 4.3 LaunchD Service (requires sudo)
 
+Use a disposable macOS VM with no existing listent service. Build as your ordinary
+user, then deploy the trusted executable as described in README.md, substituting
+`./target/release/listent` as the source for `install`. Never run the old vulnerable
+installer as root from a user-writable path.
+
 | # | Test | Command | Expected Result |
 |---|------|---------|-----------------|
-| 4.3.1 | Install service | `sudo ./target/release/listent daemon install` | Creates plist in /Library/LaunchDaemons, loads service via launchctl |
+| 4.3.1 | Install service | `sudo /Library/Listent/listent daemon install` | Creates protected config and plist, loads service via launchctl |
 | 4.3.2 | Verify plist | `cat /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist` | Valid XML plist with correct binary path and arguments |
-| 4.3.3 | Service running | `launchctl list \| grep listent` | Service appears in launchctl output |
+| 4.3.3 | Service running | `sudo launchctl print system/com.microsoft.sysinternals.listent` | Shows the running service and its canonical protected paths |
 | 4.3.4 | Uninstall service | `sudo ./target/release/listent daemon uninstall` | Unloads service and removes plist file |
 | 4.3.5 | Install without sudo | `./target/release/listent daemon install` | Fails with permission denied error |
+
+#### Installation permission regressions (macOS)
+
+Run `cargo test --locked --bin listent daemon::permissions::tests` and
+`cargo test --locked --test test_daemon_config` as an ordinary user. The unit tests
+cover ownership/modes, ACL parsing and a real macOS write ACL, canonical paths,
+writable parents, atomic replacement, link safety, and failed-write cleanup.
+These commands do not start a service. To exercise the ancestor check with
+root-owned temporary files too, run only the built unit-test executable's
+`daemon::permissions::tests` filter under sudo in this disposable VM (not cargo,
+and not the integration tests).
+
+For end-to-end checks, use only a trusted test binary and harmless config with
+`path_filters = ["/usr/bin"]` and `entitlement_filters = []`:
+
+1. Install with `sudo /Library/Listent/listent daemon install --config ./daemon.toml`.
+   Run `plutil -lint /Library/LaunchDaemons/com.microsoft.sysinternals.listent.plist`
+   and `plutil -p` on that same file. Verify the executable is under `/Library/Listent`
+   and `--config` uses `/private/etc/listent/daemon.toml`, not the input path.
+2. Inspect the executable, config, plist, `/var/run/listent`, `/var/log/listent`,
+   and **each resolved ancestor** with `stat -f '%Su %Sg %Sp %N' PATH` and
+   `ls -lde PATH`. Expect root ownership and no group/other write bits or ACL allow
+   entries; config is `0600`, plist is `0644`, and newly created log is `0600`.
+   With the service unloaded, repeat installation under `sudo sh -c 'umask 000;
+   /Library/Listent/listent daemon install --config /etc/listent/daemon.toml'`.
+   Required file modes must remain unchanged.
+3. Edit the original `./daemon.toml`; the installed config must not change.
+   As the ordinary user, attempts to append to or rename the installed executable,
+   config, or plist must fail. Use harmless content only, in this disposable VM.
+4. Uninstall, then try `sudo ./target/release/listent daemon install --config ./daemon.toml`.
+   It must fail before saving config or bootstrapping. Verify the service is absent.
+   For separate ancestor cases, create a dedicated fixture directory under
+   `/Library/Listent`, put a trusted root-owned `0755` binary in it, and either make
+   that fixture directory group-writable or add `everyone allow add_file,delete_child`
+   using `chmod +a`. Installation from that binary must fail. Change **only** the
+   dedicated fixture, never `/Library`, a home directory, or a Homebrew tree.
+5. With no service loaded, use config/plist destination symlinks or hard links
+   pointing to harmless sentinel files in a dedicated root-owned fixture directory.
+   Install again: the destination links must be replaced by regular protected files
+   and the sentinels must stay unchanged. A pre-existing linked daemon log must
+   instead produce an error and must not be written through.
+6. Restore the test log if needed, install successfully, and check `daemon status`
+   and `daemon logs`. Uninstall with `sudo /Library/Listent/listent daemon uninstall`.
+   Confirm the service/plist are gone; the protected binary/config remain for reuse.
+
+Windows/Linux checks cannot substitute for these macOS launchd and ACL checks.
 
 ---
 
